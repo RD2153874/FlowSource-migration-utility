@@ -1,10 +1,10 @@
 # FlowSource Migration Agent
 
-🚀 Intelligent AI agent that automates the conversion of Backstage applications into FlowSource applications using official documentation and configuration files.
+🚀 Intelligent Utility tool that automates the conversion of Backstage applications into FlowSource applications using official documentation and configuration files.
 
 ## 🎯 Overview
 
-The FlowSource Migration Agent is a Node.js-based automation tool that transforms standard Backstage installations into fully-featured FlowSource platforms. It follows the official FlowSource documentation to ensure accurate and complete migrations.
+The FlowSource Migration Utility is a Node.js-based automation tool that transforms standard Backstage installations into fully-featured FlowSource platforms. It follows the official FlowSource documentation to ensure accurate and complete migrations.
 
 ## ✨ Features
 
