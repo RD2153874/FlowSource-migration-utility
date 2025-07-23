@@ -231,60 +231,279 @@ export class InteractiveMode {
     console.log(chalk.gray("Debug: process.stdin.isTTY =", process.stdin.isTTY));
     console.log(chalk.gray("Debug: process.platform =", process.platform));
 
-    const questions = [
+    // Step 1: Ask if they want GitHub authentication
+    const setupQuestion = await inquirer.prompt([
       {
         type: "confirm",
         name: "setupGitHubAuth",
         message: "Do you want to configure GitHub authentication?",
         default: true,
-      },
-      {
-        type: "confirm",
-        name: "hasGitHubOAuth",
-        message: "Do you have a GitHub OAuth App already created?",
-        when: (answers) => answers.setupGitHubAuth,
-        default: false,
-      },
-      {
-        type: "input",
-        name: "githubClientId",
-        message: "Enter your GitHub OAuth App Client ID:",
-        when: (answers) => answers.setupGitHubAuth && answers.hasGitHubOAuth,
-        validate: (input) => input.length > 0 || "Client ID is required",
-      },
-      {
-        type: "password",
-        name: "githubClientSecret",
-        message: "Enter your GitHub OAuth App Client Secret:",
-        when: (answers) => answers.setupGitHubAuth && answers.hasGitHubOAuth,
-        validate: (input) => input.length > 0 || "Client Secret is required",
-      },
-    ];
-
-    const answers = await Promise.race([
-      inquirer.prompt(questions),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Input timeout")), 300000)
-      ),
+      }
     ]);
 
-    if (answers.setupGitHubAuth && answers.hasGitHubOAuth) {
-      config.githubAuth = {
-        clientId: answers.githubClientId,
-        clientSecret: answers.githubClientSecret,
-        callbackUrl: "http://localhost:3000/api/auth/github/handler/frame",
-      };
-    } else if (answers.setupGitHubAuth) {
+    if (!setupQuestion.setupGitHubAuth) {
+      return;
+    }
+
+    // Step 2: Collect OAuth credentials
+    const oauthAnswers = await this.collectOAuthCredentials();
+    
+    if (!oauthAnswers.hasOAuthApp) {
       console.log("\n" + chalk.yellow("⚠️ GitHub OAuth App setup required:"));
       console.log("1. Go to: https://github.com/settings/applications/new");
       console.log("2. Application name: Your App Name");
       console.log("3. Homepage URL: http://localhost:3000");
-      console.log(
-        "4. Authorization callback URL: http://localhost:3000/api/auth/github/handler/frame"
-      );
-      console.log(
-        "5. Update app-config.yaml with your credentials after migration\n"
-      );
+      console.log("4. Authorization callback URL: http://localhost:7007/api/auth/github/handler/frame");
+      console.log("5. Update app-config.yaml with your credentials after migration\n");
+      
+      config.githubAuth = {
+        clientId: "YOUR_GITHUB_CLIENT_ID",
+        clientSecret: "YOUR_GITHUB_CLIENT_SECRET",
+        organization: "TheCognizantFoundry",
+        callbackUrl: "http://localhost:7007/api/auth/github/handler/frame",
+        requiresManualSetup: true,
+        personalAccessToken: "YOUR_GITHUB_TOKEN"
+      };
+      return;
     }
+
+    // Step 3: Collect Integration credentials (PAT or GitHub App)
+    const integrationAnswers = await this.collectIntegrationCredentials();
+
+    // Step 4: Build complete config object
+    config.githubAuth = {
+      // OAuth credentials
+      clientId: oauthAnswers.clientId,
+      clientSecret: oauthAnswers.clientSecret,
+      organization: oauthAnswers.organization || "",
+      callbackUrl: oauthAnswers.callbackUrl || "http://localhost:7007/api/auth/github/handler/frame",
+      
+      // Integration credentials
+      integrationMethod: integrationAnswers.method,
+      personalAccessToken: integrationAnswers.personalAccessToken,
+      githubApp: integrationAnswers.githubApp,
+      
+      // Metadata
+      requiresManualSetup: false // All real credentials collected
+    };
+
+    console.log("\n" + chalk.green("✅ GitHub authentication fully configured"));
+  }
+
+  async collectOAuthCredentials() {
+    const questions = [
+      {
+        type: "confirm",
+        name: "hasOAuthApp",
+        message: "Do you have a GitHub OAuth App created?",
+        default: false,
+      },
+      {
+        type: "input",
+        name: "clientId",
+        message: "Enter your GitHub OAuth App Client ID:",
+        when: (answers) => answers.hasOAuthApp,
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Client ID is required";
+          }
+          return true;
+        },
+      },
+      {
+        type: "password",
+        name: "clientSecret",
+        message: "Enter your GitHub OAuth App Client Secret:",
+        when: (answers) => answers.hasOAuthApp,
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Client Secret is required";
+          }
+          return true;
+        },
+      },
+      {
+        type: "input",
+        name: "organization",
+        message: "Enter your GitHub organization name (optional):",
+        when: (answers) => answers.hasOAuthApp,
+      },
+      {
+        type: "input",
+        name: "callbackUrl",
+        message: "Enter the authorization callback URL:",
+        default: "http://localhost:7007/api/auth/github/handler/frame",
+        when: (answers) => answers.hasOAuthApp,
+      },
+    ];
+
+    return await Promise.race([
+      inquirer.prompt(questions),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("OAuth input timeout")), 300000)
+      ),
+    ]);
+  }
+
+  async collectIntegrationCredentials() {
+    // Step 1: Choose integration method
+    const methodQuestion = await inquirer.prompt([
+      {
+        type: "list",
+        name: "method",
+        message: "Choose your GitHub integration method:",
+        choices: [
+          {
+            name: "Personal Access Token (PAT) - Simple setup, basic features",
+            value: "pat"
+          },
+          {
+            name: "GitHub App - Advanced features, better security, recommended for organizations",
+            value: "github-app"
+          }
+        ],
+        default: "pat"
+      }
+    ]);
+
+    if (methodQuestion.method === "github-app") {
+      return await this.collectGitHubAppCredentials();
+    } else {
+      return await this.collectPATCredentials();
+    }
+  }
+
+  async collectPATCredentials() {
+    const patQuestions = [
+      {
+        type: "input",
+        name: "personalAccessToken",
+        message: "Enter your GitHub Personal Access Token (for repository integration):",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Personal Access Token is required for GitHub integration";
+          }
+          if (input.trim().length < 20) {
+            return "GitHub Personal Access Token should be at least 20 characters long";
+          }
+          return true;
+        },
+      }
+    ];
+
+    const patAnswers = await Promise.race([
+      inquirer.prompt(patQuestions),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("PAT input timeout")), 300000)
+      ),
+    ]);
+
+    return {
+      method: "pat",
+      personalAccessToken: patAnswers.personalAccessToken.trim(),
+      githubApp: null
+    };
+  }
+
+  async collectGitHubAppCredentials() {
+    // Step 1: Check if they have GitHub App
+    const hasAppQuestion = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "hasGitHubApp",
+        message: "Do you have a GitHub App already created?",
+        default: false,
+      }
+    ]);
+
+    if (!hasAppQuestion.hasGitHubApp) {
+      console.log("\n" + chalk.blue("📋 To create a GitHub App, visit: https://github.com/settings/apps/new"));
+      console.log("📋 Required permissions: Contents (read), Metadata (read), Pull requests (read)");
+      console.log("📋 Callback URL: http://localhost:7007/api/auth/github/handler/frame");
+      
+      const continueQuestion = await inquirer.prompt([{
+        type: "confirm",
+        name: "continue",
+        message: "Have you created the GitHub App and want to continue with configuration?",
+        default: false
+      }]);
+
+      if (!continueQuestion.continue) {
+        console.log(chalk.yellow("⚠️ GitHub App setup cancelled. Using fallback PAT configuration."));
+        return await this.collectPATCredentials();
+      }
+    }
+
+    // Step 2: Collect GitHub App credentials
+    const githubAppQuestions = [
+      {
+        type: "input",
+        name: "appId",
+        message: "Enter your GitHub App ID:",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "GitHub App ID is required";
+          }
+          if (!/^\d+$/.test(input.trim())) {
+            return "GitHub App ID should be a number";
+          }
+          return true;
+        },
+      },
+      {
+        type: "input",
+        name: "appClientId", 
+        message: "Enter your GitHub App Client ID:",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "GitHub App Client ID is required";
+          }
+          return true;
+        },
+      },
+      {
+        type: "password",
+        name: "appClientSecret",
+        message: "Enter your GitHub App Client Secret:",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "GitHub App Client Secret is required";
+          }
+          return true;
+        },
+      },
+      {
+        type: "editor",
+        name: "privateKey",
+        message: "Enter your GitHub App Private Key (paste the entire key including headers):",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "GitHub App Private Key is required";
+          }
+          if (!input.includes("BEGIN") || !input.includes("END")) {
+            return "Please provide a valid private key with BEGIN and END headers";
+          }
+          return true;
+        },
+      },
+    ];
+
+    const githubAppAnswers = await Promise.race([
+      inquirer.prompt(githubAppQuestions),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("GitHub App input timeout")), 600000)
+      ),
+    ]);
+
+    return {
+      method: "github-app",
+      personalAccessToken: null,
+      githubApp: {
+        appId: githubAppAnswers.appId.trim(),
+        clientId: githubAppAnswers.appClientId.trim(),
+        clientSecret: githubAppAnswers.appClientSecret.trim(),
+        privateKey: githubAppAnswers.privateKey.trim(),
+      }
+    };
   }
 }

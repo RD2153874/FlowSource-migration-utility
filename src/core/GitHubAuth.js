@@ -1,6 +1,5 @@
 import path from "path";
 import fs from "fs-extra";
-import inquirer from "inquirer";
 import YamlConfigMerger from "../utils/YamlConfigMerger.js";
 
 export class GitHubAuth {
@@ -16,71 +15,21 @@ export class GitHubAuth {
   }
 
   async setup() {
-    // Check if credentials are pre-configured
-    if (this.config.githubAuth) {
-      this.logger.info("🤖 Using pre-configured GitHub credentials");
-      await this.setupGitHubOnlyNonInteractive();
-      return;
+    // Expect complete credentials to be provided by InteractiveMode
+    if (!this.config.githubAuth) {
+      throw new Error("GitHub credentials must be collected by InteractiveMode before GitHubAuth setup");
     }
 
-    await this.setupGitHubOnly();
-  }
+    this.githubConfig = this.config.githubAuth;
+    this.logger.info("🤖 Using provided GitHub credentials");
 
-  async setupGitHubOnly() {
-    this.logger.info("🐙 Starting GitHub authentication setup...");
-
-    // Step 1: Find and parse GithubAuth.md
-    await this.findAndParseGitHubDoc();
-
-    // Step 2: Extract GitHub-specific instructions
-    await this.extractGitHubInstructions();
-
-    // Step 3: Collect GitHub OAuth credentials
-    await this.collectGitHubCredentials();
-
-    // Step 4: Implement GitHub authentication instructions
+    // Skip credential collection, go straight to implementation
     await this.implementGitHubInstructions();
-
+    
     this.logger.info("✅ GitHub authentication setup completed");
   }
 
-  async setupGitHubOnlyNonInteractive() {
-    this.logger.info("🐙 Starting non-interactive GitHub authentication setup...");
 
-    // Use default GitHub configuration without prompts
-    this.githubConfig = {
-      clientId: "YOUR_GITHUB_CLIENT_ID",
-      clientSecret: "YOUR_GITHUB_CLIENT_SECRET",
-      organization: "TheCognizantFoundry", 
-      callbackUrl: "http://localhost:7007/api/auth/github/handler/frame",
-      requiresManualSetup: true,
-      personalAccessToken: "YOUR_GITHUB_TOKEN"
-    };
-
-    this.logger.info("📋 Using default GitHub configuration (manual setup required)");
-
-    // Skip documentation parsing in non-interactive mode to avoid potential hanging
-    this.githubInstructions = [];
-    this.githubConfigBlocks = [];
-
-    // Copy GitHub-specific authentication files
-    await this.copyGitHubAuthFiles();
-
-    // Configure frontend App.tsx with GitHub provider (Step 6 from GithubAuth.md)
-    await this.setupFrontendGitHubProvider();
-
-    // Update app configuration with GitHub settings
-    await this.updateAppConfigWithGitHub();
-
-    // Update package.json files with GitHub auth dependencies
-    await this.updatePackageJsonForGitHub();
-
-    this.logger.info("✅ Non-interactive GitHub authentication setup completed");
-    this.logger.warn("⚠️ Manual configuration required:");
-    this.logger.warn("   - Update GitHub OAuth credentials in app-config.yaml");
-    this.logger.warn("   - Replace YOUR_GITHUB_TOKEN with actual Personal Access Token");
-    this.logger.warn("   - Configure GitHub App credentials if using GitHub App integration");
-  }
 
   getGitHubAuthReference() {
     return this.authConfigure.providerReferences.find(
@@ -255,305 +204,16 @@ export class GitHubAuth {
     return githubActions.some((action) => text.toLowerCase().includes(action));
   }
 
-  async collectGitHubCredentials() {
-    this.logger.info("🔑 Collecting GitHub OAuth credentials...");
 
-    // Check if credentials are already provided in config
-    if (this.config.githubAuth) {
-      this.githubConfig = this.config.githubAuth;
-      this.logger.info("✅ Using provided GitHub credentials");
-      return;
-    }
-
-    // Check if running in non-interactive mode
-    if (this.config.nonInteractive) {
-      this.logger.info("🤖 Non-interactive mode - using default placeholder credentials");
-      this.githubConfig = {
-        clientId: "YOUR_GITHUB_CLIENT_ID",
-        clientSecret: "YOUR_GITHUB_CLIENT_SECRET",
-        organization: "TheCognizantFoundry",
-        callbackUrl: "http://localhost:7007/api/auth/github/handler/frame",
-        requiresManualSetup: true,
-        personalAccessToken: "YOUR_GITHUB_TOKEN"
-      };
-      return;
-    }
-
-    // Interactive prompts for GitHub OAuth credentials
-    try {
-      const oauthQuestions = [
-        {
-          type: "confirm",
-          name: "hasOAuthApp",
-          message: "Do you have a GitHub OAuth App created?",
-          default: false,
-        },
-        {
-          type: "input",
-          name: "clientId",
-          message: "Enter your GitHub OAuth App Client ID:",
-          when: (answers) => answers.hasOAuthApp,
-          validate: (input) => {
-            if (!input || input.trim().length === 0) {
-              return "Client ID is required";
-            }
-            return true;
-          },
-        },
-        {
-          type: "password",
-          name: "clientSecret",
-          message: "Enter your GitHub OAuth App Client Secret:",
-          when: (answers) => answers.hasOAuthApp,
-          validate: (input) => {
-            if (!input || input.trim().length === 0) {
-              return "Client Secret is required";
-            }
-            return true;
-          },
-        },
-        {
-          type: "input",
-          name: "organization",
-          message: "Enter your GitHub organization name (optional):",
-          default: "TheCognizantFoundry",
-          when: (answers) => answers.hasOAuthApp,
-        },
-        {
-          type: "input",
-          name: "callbackUrl",
-          message: "Enter the authorization callback URL:",
-          default: "http://localhost:7007/api/auth/github/handler/frame",
-          when: (answers) => answers.hasOAuthApp,
-        },
-      ];
-
-      const oauthAnswers = await inquirer.prompt(oauthQuestions);
-
-      if (!oauthAnswers.hasOAuthApp) {
-        this.logger.warn(
-          "⚠️ GitHub OAuth App not configured. Manual setup required."
-        );
-        this.githubConfig = {
-          clientId: "YOUR_GITHUB_CLIENT_ID",
-          clientSecret: "YOUR_GITHUB_CLIENT_SECRET",
-          organization: "TheCognizantFoundry",
-          callbackUrl: "http://localhost:7007/api/auth/github/handler/frame",
-          requiresManualSetup: true,
-        };
-      } else {
-        this.githubConfig = {
-          clientId: oauthAnswers.clientId.trim(),
-          clientSecret: oauthAnswers.clientSecret.trim(),
-          organization: oauthAnswers.organization?.trim() || "TheCognizantFoundry",
-          callbackUrl: oauthAnswers.callbackUrl.trim(),
-          requiresManualSetup: false,
-        };
-      }
-
-      // Always collect GitHub integration credentials (PAT or GitHub App) - this is the important part!
-      await this.collectGitHubIntegrationCredentials();
-      
-    } catch (error) {
-      this.logger.warn("⚠️ OAuth credential collection failed, using defaults");
-      this.logger.warn(`Error: ${error.message}`);
-      this.githubConfig = {
-        clientId: "YOUR_GITHUB_CLIENT_ID",
-        clientSecret: "YOUR_GITHUB_CLIENT_SECRET",
-        organization: "TheCognizantFoundry",
-        callbackUrl: "http://localhost:7007/api/auth/github/handler/frame",
-        requiresManualSetup: true,
-        personalAccessToken: "YOUR_GITHUB_TOKEN"
-      };
-    }
-  }
-
-  async collectGitHubIntegrationCredentials() {
-    this.logger.info("🔗 Collecting GitHub integration credentials...");
-
-    // Skip integration credential collection if in non-interactive mode  
-    if (this.config.nonInteractive) {
-      this.logger.info("🤖 Non-interactive mode - using default PAT placeholder");
-      this.githubConfig.personalAccessToken = "YOUR_GITHUB_TOKEN";
-      return;
-    }
-
-    // First ask which integration method they prefer
-    const methodQuestion = [
-      {
-        type: "list",
-        name: "integrationMethod",
-        message: "Choose your GitHub integration method:",
-        choices: [
-          {
-            name: "Personal Access Token (PAT) - Simple setup, basic features",
-            value: "pat"
-          },
-          {
-            name: "GitHub App - Advanced features, better security, recommended for organizations",
-            value: "github-app"
-          }
-        ],
-        default: "pat"
-      }
-    ];
-
-    try {
-      const methodAnswer = await inquirer.prompt(methodQuestion);
-
-      if (methodAnswer.integrationMethod === "github-app") {
-        // GitHub App flow
-        const githubAppQuestions = [
-          {
-            type: "confirm",
-            name: "hasGitHubApp",
-            message: "Do you have a GitHub App already created?",
-            default: false,
-          }
-        ];
-
-        const hasAppAnswer = await inquirer.prompt(githubAppQuestions);
-
-        if (!hasAppAnswer.hasGitHubApp) {
-          this.logger.info("📋 To create a GitHub App, visit: https://github.com/settings/apps/new");
-          this.logger.info("📋 Required permissions: Contents (read), Metadata (read), Pull requests (read)");
-          this.logger.info("📋 Callback URL: http://localhost:7007/api/auth/github/handler/frame");
-          
-          const continueQuestion = [{
-            type: "confirm",
-            name: "continue",
-            message: "Have you created the GitHub App and want to continue with configuration?",
-            default: false
-          }];
-
-          const continueAnswer = await inquirer.prompt(continueQuestion);
-          if (!continueAnswer.continue) {
-            this.logger.warn("⚠️ GitHub App setup cancelled. Using fallback PAT configuration.");
-            await this.collectPATCredentials();
-            return;
-          }
-        }
-
-        await this.collectGitHubAppCredentials();
-      } else {
-        // PAT flow
-        await this.collectPATCredentials();
-      }
-    } catch (error) {
-      this.logger.warn("⚠️ Integration credential collection failed, using default PAT placeholder");
-      this.logger.warn(`Error: ${error.message}`);
-      this.githubConfig.personalAccessToken = "YOUR_GITHUB_TOKEN";
-    }
-  }
-
-  async collectPATCredentials() {
-    this.logger.info("🔑 Collecting Personal Access Token credentials...");
-    
-    try {
-      const patQuestions = [
-        {
-          type: "input",
-          name: "personalAccessToken",
-          message: "Enter your GitHub Personal Access Token (for repository integration):",
-          validate: (input) => {
-            if (!input || input.trim().length === 0) {
-              return "Personal Access Token is required for GitHub integration";
-            }
-            if (input.trim().length < 20) {
-              return "GitHub Personal Access Token should be at least 20 characters long";
-            }
-            return true;
-          },
-        }
-      ];
-
-      const patAnswers = await inquirer.prompt(patQuestions);
-      this.githubConfig.personalAccessToken = patAnswers.personalAccessToken.trim();
-      this.logger.info("✅ Personal Access Token configured");
-    } catch (error) {
-      this.logger.warn("⚠️ PAT collection failed, using placeholder");
-      this.logger.warn(`Error: ${error.message}`);
-      this.githubConfig.personalAccessToken = "YOUR_GITHUB_TOKEN";
-    }
-  }
-
-  async collectGitHubAppCredentials() {
-    this.logger.info("🔧 Collecting GitHub App credentials...");
-
-    try {
-      const githubAppQuestions = [
-        {
-          type: "input",
-          name: "appId",
-          message: "Enter your GitHub App ID:",
-          validate: (input) => {
-            if (!input || input.trim().length === 0) {
-              return "GitHub App ID is required";
-            }
-            if (!/^\d+$/.test(input.trim())) {
-              return "GitHub App ID should be a number";
-            }
-            return true;
-          },
-        },
-        {
-          type: "input",
-          name: "appClientId", 
-          message: "Enter your GitHub App Client ID:",
-          validate: (input) => {
-            if (!input || input.trim().length === 0) {
-              return "GitHub App Client ID is required";
-            }
-            return true;
-          },
-        },
-        {
-          type: "password",
-          name: "appClientSecret",
-          message: "Enter your GitHub App Client Secret:",
-          validate: (input) => {
-            if (!input || input.trim().length === 0) {
-              return "GitHub App Client Secret is required";
-            }
-            return true;
-          },
-        },
-        {
-          type: "editor",
-          name: "privateKey",
-          message: "Enter your GitHub App Private Key (paste the entire key including headers):",
-          validate: (input) => {
-            if (!input || input.trim().length === 0) {
-              return "GitHub App Private Key is required";
-            }
-            if (!input.includes("BEGIN") || !input.includes("END")) {
-              return "Please provide a valid private key with BEGIN and END headers";
-            }
-            return true;
-          },
-        },
-      ];
-
-      const githubAppAnswers = await inquirer.prompt(githubAppQuestions);
-
-      this.githubConfig.githubApp = {
-        appId: githubAppAnswers.appId.trim(),
-        clientId: githubAppAnswers.appClientId.trim(),
-        clientSecret: githubAppAnswers.appClientSecret.trim(),
-        privateKey: githubAppAnswers.privateKey.trim(),
-      };
-
-      this.logger.info("✅ GitHub App credentials collected");
-      this.logger.info("✅ GitHub integration credentials collected");
-    } catch (error) {
-      this.logger.warn("⚠️ GitHub App credential collection failed, falling back to PAT");
-      this.logger.warn(`Error: ${error.message}`);
-      await this.collectPATCredentials();
-    }
-  }
 
   async implementGitHubInstructions() {
     this.logger.info("⚙️ Implementing GitHub authentication instructions...");
+
+    // Step 1: Find and parse GitHub documentation (for config blocks)
+    await this.findAndParseGitHubDoc();
+
+    // Step 2: Extract GitHub-specific instructions
+    await this.extractGitHubInstructions();
 
     // Process each GitHub instruction section
     for (const instruction of this.githubInstructions) {
@@ -827,10 +487,24 @@ export class GitHubAuth {
         .replace(/<GITHUB_CLIENT_SECRET>/g, this.githubConfig.clientSecret)
         .replace(/<GITHUB_APP_CLIENT_ID>/g, this.githubConfig.clientId)
         .replace(/<GITHUB_APP_CLIENT_SECRET>/g, this.githubConfig.clientSecret)
-        // Handle other common placeholders
-        .replace(/<add your github personal access token>/g, '${GITHUB_TOKEN}')
-        .replace(/<GITHUB_APP_APP_ID>/g, '${GITHUB_APP_APP_ID}')
-        .replace(/<GITHUB_APP_PRIVATE_KEY>/g, '${GITHUB_APP_PRIVATE_KEY}');
+        // Handle organization placeholders
+        .replace(/<GitHub organization>/g, this.githubConfig.organization || '')
+        .replace(/<GITHUB_ORGANIZATION>/g, this.githubConfig.organization || '')
+        .replace(/TheCognizantFoundry/g, this.githubConfig.organization || 'TheCognizantFoundry')
+        // Handle other common placeholders - use actual credentials when available
+        .replace(/<add your github personal access token>/g, 
+          this.githubConfig.personalAccessToken && 
+          this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
+          !this.githubConfig.requiresManualSetup 
+            ? this.githubConfig.personalAccessToken 
+            : '${GITHUB_TOKEN}')
+        .replace(/<GITHUB_APP_APP_ID>/g, 
+          this.githubConfig.githubApp?.appId || '${GITHUB_APP_APP_ID}')
+        .replace(/<GITHUB_APP_PRIVATE_KEY>/g, 
+          this.githubConfig.githubApp?.privateKey && 
+          !this.githubConfig.requiresManualSetup 
+            ? this.githubConfig.githubApp.privateKey 
+            : '${GITHUB_APP_PRIVATE_KEY}');
 
       try {
         // Parse the YAML configuration from the content
@@ -1055,15 +729,15 @@ const authProviders: AuthProvider[] = [
   }
 
   async copyGitHubAuthFiles() {
-    const authSourcePath = path.join(
-      this.config.sourcePath,
-      "packages-core",
-      "backend",
-      "src",
-      "plugins",
-      "auth.ts"
-    );
+    this.logger.info("🔧 Generating clean auth.ts from documentation...");
+    
+    // Generate auth.ts from scratch using documentation code blocks
+    await this.generateCleanAuthFile();
+    
+    this.logger.info("✅ Generated clean auth.ts with GitHub provider only");
+  }
 
+  async generateCleanAuthFile() {
     const authDestPath = path.join(
       this.config.destinationPath,
       "packages",
@@ -1073,18 +747,220 @@ const authProviders: AuthProvider[] = [
       "auth.ts"
     );
 
-    if (await fs.pathExists(authSourcePath)) {
-      await fs.ensureDir(path.dirname(authDestPath));
-      
-      // Read the template and apply selective commenting to activate only GitHub by default
-      let authContent = await fs.readFile(authSourcePath, "utf8");
-      authContent = this.commentNonGitHubProviders(authContent);
-      
-      await fs.writeFile(authDestPath, authContent, "utf8");
-      this.logger.info("✅ Created auth.ts with GitHub provider enabled by default");
-    } else {
-      throw new Error(`Auth template not found at ${authSourcePath}`);
+    await fs.ensureDir(path.dirname(authDestPath));
+
+    // Build clean auth.ts content from documentation
+    const authContent = this.buildAuthFileContent();
+    
+    await fs.writeFile(authDestPath, authContent, "utf8");
+    this.logger.info("📄 Generated clean auth.ts with GitHub authentication only");
+  }
+
+  buildAuthFileContent() {
+    return `// Generated auth.ts - GitHub Authentication Only
+// Based on Auth.md and GithubAuth.md documentation
+
+// Common imports from Auth.md Step 1
+import { initDatabase } from "./database/initDatabase.service";
+import { createBackendModule, coreServices } from "@backstage/backend-plugin-api";
+import { providers, OAuthResult } from "@backstage/plugin-auth-backend";
+import { getUpdatedUserRefs, getUserRoles } from "./helper/auth-helper";
+import { authProvidersExtensionPoint, createOAuthProviderFactory } from "@backstage/plugin-auth-node";
+import { OAuthAuthenticatorResult, PassportProfile, SignInInfo, AuthResolverContext } from "@backstage/plugin-auth-node";
+import { Config } from "@backstage/config";
+import { PluginDatabaseManager } from "@backstage/backend-common";
+import { LoggerService, RootConfigService } from "@backstage/backend-plugin-api";
+import { DEFAULT_NAMESPACE, stringifyEntityRef } from "@backstage/catalog-model";
+import { Knex } from "knex";
+import { decodeJwt } from "jose";
+import { RoleMappingDatabaseService } from "./database/roleMappingDatabase.service";
+import { EmailToRoleMappingDatabaseService } from "./database/emailToRoleMappingDatabase.service";
+
+// GitHub-specific imports from GithubAuth.md Step 3
+import { GithubOAuthResult } from '@backstage/plugin-auth-backend';
+import { githubAuthenticator } from '@backstage/plugin-auth-backend-module-github-provider';
+import { Octokit } from '@octokit/rest';
+import { createAppAuth } from "@octokit/auth-app";
+
+// Custom auth providers module from Auth.md Step 1
+export const customAuthProvidersModule = createBackendModule({
+  pluginId: "auth",
+  moduleId: "custom-auth-providers-module",
+  register(reg) {
+    reg.registerInit({
+      deps: {
+        providers: authProvidersExtensionPoint,
+        config: coreServices.rootConfig,
+        database: coreServices.database,
+        logger: coreServices.logger,
+      },
+      async init({ providers: authProviders, config, database, logger }) {
+        await initDatabase({
+          logger: logger,
+          database: database,
+        });
+
+        // GitHub provider registration from GithubAuth.md Step 4
+        authProviders.registerProvider({
+          providerId: 'github',
+          factory: createOAuthProviderFactory({
+            authenticator: githubAuthenticator,
+            async signInResolver(info, ctx) {
+              return githubResolver(info, ctx, config, database, logger);
+            },
+          }),
+        });
+      },
+    });
+  },
+});
+
+// GitHub resolver and utility functions from GithubAuth.md Steps 5 & 8
+export async function githubResolver(
+  info: SignInInfo<GithubOAuthResult> | SignInInfo<OAuthAuthenticatorResult<PassportProfile>>,
+  ctx: AuthResolverContext,
+  config: Config | RootConfigService,
+  database: PluginDatabaseManager,
+  logger: LoggerService
+) {
+  let username: any = info?.result?.fullProfile?.username;
+  let teams: any = await getGithubTeamsOfUser(config, username);
+
+  const db: Knex = await database.getClient();
+  const roleMappingDatabaseService = new RoleMappingDatabaseService(db);
+
+  const userRefs = await getUpdatedUserRefs(teams, 'github', roleMappingDatabaseService);
+  const usernameEntityRef = stringifyEntityRef({
+    kind: 'User',
+    name: username,
+    namespace: DEFAULT_NAMESPACE,
+  });
+  
+  logger.info(\`Resolved user \${username} with \${userRefs.length} userRefs entities\`);
+
+  return ctx.issueToken({
+    claims: {
+      sub: usernameEntityRef, // The user's own identity
+      ent: userRefs
+    },
+  });
+}
+
+async function getGithubTeamsOfUser(config: Config, username: any) {
+  let teams: any = [];
+  let octokit: Octokit;
+  octokit = await getGithubOctokitClient(config);
+  try {
+    let environment = config.getString('auth.environment');
+    const organization = config.getString('auth.providers.github.' + environment + '.githubOrganization');
+    const query = \`query($cursor: String, $org: String!, $userLogins: [String!], $username: String!)  {
+          user(login: $username) {
+              id
+          }
+          organization(login: $org) {
+            teams (first:1, userLogins: $userLogins, after: $cursor) { 
+                nodes {
+                  name
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }        
+            }
+          }
+      }\`;
+    let data: any;
+    let cursor = null;
+    // We need to check if the user exists, because if it doesn't exist then all teams in the org
+    // are returned. If user doesn't exist graphql will throw an exception
+    // Paginate
+    do {
+      data = await octokit.graphql(query, {
+        "cursor": cursor,
+        "org": organization,
+        "userLogins": [username],
+        "username": username
+      });
+      teams = teams.concat(data.organization.teams.nodes.map((val: any) => {
+        return val.name;
+      }));
+      cursor = data.organization.teams.pageInfo.endCursor;
+    } while (data.organization.teams.pageInfo.hasNextPage);
+  } catch (error) {
+    console.log(error);
+  }
+  return teams;
+}
+
+async function getGithubOctokitClient(config: Config): Promise<Octokit> {
+  const gitTokenArray: any[] = config.getConfigArray('integrations.github');
+  //The first github token from the Integration is taken from the app-config.yaml
+  const gitPersonalAccessToken = gitTokenArray[0].data.token;
+  const githubAppTokenArray = gitTokenArray[0].data.apps;
+  let octokit: Octokit;
+  if (gitPersonalAccessToken != null && gitPersonalAccessToken != undefined) {
+    //Create a Octokit client using the GitHub Personal Access token
+    octokit = new Octokit({
+      auth: gitPersonalAccessToken,
+    });
+  } else if (githubAppTokenArray != null && githubAppTokenArray != undefined) {
+    //Create a Octokit client using the GitHub App configuration data
+    const installationId = await fetchInstallationId(config);
+    octokit = new Octokit({
+      authStrategy: createAppAuth,
+      auth: {
+        appId: getGithubAppConfig(config).appId,
+        privateKey: getGithubAppConfig(config).privatekey,
+        clientId: getGithubAppConfig(config).clientId,
+        clientSecret: getGithubAppConfig(config).clientSecret,
+        installationId: installationId,
+      },
+    });
+  } else {
+    //GitApp or GitHub Personal Access token configuration is not found
+    const exceptionMessage = 'GitApp or GitHub Personal Access token configuration in app-config.yaml is not found';
+    throw new Error(exceptionMessage);
+  }
+  return octokit;
+}
+
+let gitHubInstalltionId: number;
+
+async function fetchInstallationId(config: Config) {
+  if (gitHubInstalltionId != null && gitHubInstalltionId != undefined) {
+    return gitHubInstalltionId;
+  } else {
+    const appOctokit: any = new Octokit({
+      authStrategy: createAppAuth,
+      auth: {
+        appId: getGithubAppConfig(config).appId,
+        privateKey: getGithubAppConfig(config).privatekey,
+        clientId: getGithubAppConfig(config).clientId,
+        clientSecret: getGithubAppConfig(config).clientSecret,
+      },
+    });
+    const { data: installations } = await appOctokit.apps.listInstallations();
+    if (installations.length === 0) {
+      throw new Error('No installations found for this app.');
     }
+    // Assuming you want the first installation ID
+    return installations[0].id;
+  }
+}
+
+function getGithubAppConfig(config: Config) {
+  const gitTokenArray: any[] = config.getOptionalConfigArray('integrations.github') || [];
+  const githubTokenIndex: number = 0;
+  const appIdIndex: number = 0;
+  let githubConfigData = {
+    appId: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].appId,
+    privatekey: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].privateKey,
+    clientId: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].clientId,
+    clientSecret: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].clientSecret
+  };
+  return githubConfigData;
+}
+`;
   }
 
   /**
@@ -1267,28 +1143,37 @@ const authProviders: AuthProvider[] = [
     );
 
     if (await fs.pathExists(appConfigPath)) {
-      // Check if GitHub config is already present
+      // Simple check - only skip if we already have a complete GitHub configuration
       const existingConfig = await fs.readFile(appConfigPath, "utf8");
-      if (existingConfig.includes("clientId: " + this.githubConfig.clientId)) {
+      
+      // Check if we already have both OAuth and some form of integration configured
+      const hasOAuth = existingConfig.includes("clientId: " + this.githubConfig.clientId);
+      const hasIntegration = existingConfig.includes("integrations:") && existingConfig.includes("github:");
+      
+      if (hasOAuth && hasIntegration) {
         this.logger.info("ℹ️ GitHub authentication already configured in app-config.yaml");
         return;
       }
 
-      // Always use actual values if they are real credentials (not placeholders)
-      // Only use environment variables for placeholder values
-      const isRealClientId = this.githubConfig.clientId && 
-                            this.githubConfig.clientId !== "YOUR_GITHUB_CLIENT_ID" &&
-                            !this.githubConfig.clientId.startsWith('${');
-      
-      const isRealClientSecret = this.githubConfig.clientSecret && 
+      // SIMPLIFIED APPROACH THAT WORKED IN genv1
+      // If we have credentials and they're not default placeholders, use them directly
+      // Only use environment variables if we don't have real credentials
+
+      // With InteractiveMode handling all collection, we always have real credentials
+      // unless requiresManualSetup is explicitly set to true (for non-configured cases)
+      const hasRealCredentials = this.githubConfig.clientId && 
+                                this.githubConfig.clientSecret &&
+                                this.githubConfig.clientId !== "YOUR_GITHUB_CLIENT_ID" &&
                                 this.githubConfig.clientSecret !== "YOUR_GITHUB_CLIENT_SECRET" &&
-                                !this.githubConfig.clientSecret.startsWith('${');
+                                !this.githubConfig.requiresManualSetup;
 
-      const clientId = isRealClientId ? this.githubConfig.clientId : '${AUTH_GITHUB_CLIENT_ID}';
-      const clientSecret = isRealClientSecret ? this.githubConfig.clientSecret : '${AUTH_GITHUB_CLIENT_SECRET}';
+      const clientId = hasRealCredentials ? this.githubConfig.clientId : '${AUTH_GITHUB_CLIENT_ID}';
+      const clientSecret = hasRealCredentials ? this.githubConfig.clientSecret : '${AUTH_GITHUB_CLIENT_SECRET}';
 
-      this.logger.info(`🔧 Using clientId: ${isRealClientId ? 'actual value' : 'environment variable'}`);
-      this.logger.info(`🔧 Using clientSecret: ${isRealClientSecret ? 'actual value' : 'environment variable'}`);
+      this.logger.info(`🔧 Using: ${hasRealCredentials ? 'actual credentials' : 'environment variables'}`);
+      if (hasRealCredentials) {
+        this.logger.info(`🔧 Writing actual OAuth credentials to app-config.yaml`);
+      }
 
       // Create GitHub authentication configuration object
       const githubAuthConfig = {
@@ -1311,20 +1196,9 @@ const authProviders: AuthProvider[] = [
         githubAuthConfig.auth.providers.github.development.githubOrganization = this.githubConfig.organization;
       }
 
-      // Configure GitHub integrations based on user choice
-      if (this.githubConfig.githubApp) {
-        // Use GitHub App configuration - use actual values if provided, env vars for placeholders
-        const isRealAppSecret = this.githubConfig.githubApp.clientSecret && 
-                               this.githubConfig.githubApp.clientSecret !== "YOUR_GITHUB_APP_CLIENT_SECRET" &&
-                               !this.githubConfig.githubApp.clientSecret.startsWith('${');
-        
-        const isRealPrivateKey = this.githubConfig.githubApp.privateKey && 
-                                this.githubConfig.githubApp.privateKey !== "YOUR_GITHUB_APP_PRIVATE_KEY" &&
-                                !this.githubConfig.githubApp.privateKey.startsWith('${');
-        
-        const actualAppSecret = isRealAppSecret ? this.githubConfig.githubApp.clientSecret : '${GITHUB_APP_CLIENT_SECRET}';
-        const actualPrivateKey = isRealPrivateKey ? this.githubConfig.githubApp.privateKey : '${GITHUB_APP_PRIVATE_KEY}';
-
+      // Configure GitHub integrations - SIMPLIFIED LOGIC
+      if (this.githubConfig.githubApp && this.githubConfig.githubApp.appId) {
+        // GitHub App integration
         githubAuthConfig.integrations = {
           github: [
             {
@@ -1333,33 +1207,32 @@ const authProviders: AuthProvider[] = [
                 {
                   appId: this.githubConfig.githubApp.appId,
                   clientId: this.githubConfig.githubApp.clientId,
-                  clientSecret: actualAppSecret,
-                  privateKey: actualPrivateKey
+                  clientSecret: this.githubConfig.githubApp.clientSecret || '${GITHUB_APP_CLIENT_SECRET}',
+                  privateKey: this.githubConfig.githubApp.privateKey || '${GITHUB_APP_PRIVATE_KEY}'
                 }
               ]
             }
           ]
         };
-        
         this.logger.info("🔧 Configured GitHub App integration with appId: " + this.githubConfig.githubApp.appId);
-      } else if (this.githubConfig.personalAccessToken) {
-        // Use Personal Access Token configuration - use actual value if provided, env var for placeholder
-        const isRealToken = this.githubConfig.personalAccessToken && 
-                           this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" &&
-                           !this.githubConfig.personalAccessToken.startsWith('${');
+      } else {
+        // Default to PAT integration (always create this section)
+        const tokenToUse = this.githubConfig.personalAccessToken || '${GITHUB_TOKEN}';
         
-        const actualToken = isRealToken ? this.githubConfig.personalAccessToken : '${GITHUB_TOKEN}';
-
         githubAuthConfig.integrations = {
           github: [
             {
               host: 'github.com',
-              token: actualToken
+              token: tokenToUse
             }
           ]
         };
         
-        this.logger.info("🔧 Configured Personal Access Token integration");
+        if (this.githubConfig.personalAccessToken) {
+          this.logger.info("🔧 Configured Personal Access Token integration with actual token");
+        } else {
+          this.logger.info("🔧 Configured Personal Access Token integration with environment variable placeholder");
+        }
       }
 
       // Merge the GitHub configuration into the existing app-config.yaml
@@ -1382,10 +1255,13 @@ const authProviders: AuthProvider[] = [
           validation.warnings.forEach(warning => this.logger.warn(`   - ${warning}`));
         }
 
-        if (this.githubConfig.requiresManualSetup) {
-          this.logger.warn(
-            "⚠️ Manual GitHub OAuth setup required - update credentials in app-config.yaml"
-          );
+        if (hasRealCredentials) {
+          this.logger.info("✅ Using actual GitHub OAuth credentials");
+          this.logger.info(`   📋 Client ID: ${this.githubConfig.clientId.substring(0, 5)}...`);
+        } else {
+          this.logger.warn("⚠️ Manual GitHub OAuth setup required - update credentials in app-config.yaml");
+          this.logger.warn(`   📋 Using placeholder for clientId: ${clientId}`);
+          this.logger.warn(`   📋 Using placeholder for clientSecret: ${clientSecret}`);
         }
 
         // Log integration method used
@@ -1393,12 +1269,16 @@ const authProviders: AuthProvider[] = [
           this.logger.info("🔧 ✅ GitHub App integration configured successfully");
           this.logger.info(`   📋 App ID: ${this.githubConfig.githubApp.appId}`);
           this.logger.info(`   📋 Client ID: ${this.githubConfig.githubApp.clientId}`);
-          if (this.githubConfig.requiresManualSetup) {
+          if (hasRealAppCredentials) {
+            this.logger.info("✅ Using actual GitHub App credentials");
+          } else {
             this.logger.warn("   ⚠️ Remember to set GITHUB_APP_CLIENT_SECRET and GITHUB_APP_PRIVATE_KEY environment variables");
           }
         } else if (this.githubConfig.personalAccessToken) {
           this.logger.info("🔧 ✅ Personal Access Token integration configured successfully");
-          if (this.githubConfig.requiresManualSetup) {
+          if (hasRealToken) {
+            this.logger.info("✅ Using actual Personal Access Token");
+          } else {
             this.logger.warn("   ⚠️ Remember to set GITHUB_TOKEN environment variable");
           }
         }
@@ -1678,111 +1558,6 @@ const authProviders: AuthProvider[] = [
       : "GitHub authentication validation failed";
 
     return validationResults;
-  }
-
-  /**
-   * Comments out non-GitHub authentication providers in auth.ts content
-   * This ensures only GitHub is active by default while keeping other providers
-   * available for easy uncommenting later
-   * @param {string} content - Original auth.ts content
-   * @returns {string} Modified content with non-GitHub providers commented out
-   */
-  commentNonGitHubProviders(content) {
-    let modifiedContent = content;
-    
-    // Define the providers to comment out (all except GitHub)
-    const providersToComment = [
-      'MICROSOFT AUTHENTICATION',
-      'AWS COGNITO AUTHENTICATION', 
-      'KEYCLOAK AUTHENTICATION',
-      'OAUTH2 PROXY AUTHENTICATION',
-      'AWS ALB AUTHENTICATION',
-      'GCP IAP AUTHENTICATION'
-    ];
-
-    // Comment out each non-GitHub provider section
-    for (const provider of providersToComment) {
-      modifiedContent = this.commentProviderSection(modifiedContent, provider);
-    }
-
-    return modifiedContent;
-  }
-
-  /**
-   * Comments out a specific provider section in auth.ts
-   * @param {string} content - File content
-   * @param {string} providerName - Name of the provider to comment out
-   * @returns {string} Modified content
-   */
-  commentProviderSection(content, providerName) {
-    const startMarker = `// ${providerName} - START`;
-    const endMarker = `// ${providerName} - END`;
-    
-    const startIndex = content.indexOf(startMarker);
-    const endIndex = content.indexOf(endMarker);
-    
-    if (startIndex !== -1 && endIndex !== -1) {
-      // Find the actual code block (after the START marker, before the END marker)
-      const beforeSection = content.substring(0, startIndex);
-      const sectionContent = content.substring(startIndex, endIndex + endMarker.length);
-      const afterSection = content.substring(endIndex + endMarker.length);
-      
-      // Check if already commented
-      if (!sectionContent.includes('/* COMMENTED OUT')) {
-        // Add block comment markers
-        const commentedSection = sectionContent.replace(
-          startMarker,
-          `${startMarker}\n/* COMMENTED OUT FOR SELECTIVE PROVIDER SETUP`
-        ).replace(
-          endMarker,
-          `*/\n${endMarker}`
-        );
-        
-        return beforeSection + commentedSection + afterSection;
-      }
-    }
-    
-    return content;
-  }
-
-  /**
-   * Utility function to uncomment a specific provider in auth.ts
-   * This can be used later to enable additional providers
-   * @param {string} authFilePath - Path to the auth.ts file
-   * @param {string} providerName - Name of the provider to uncomment
-   */
-  async uncommentProvider(authFilePath, providerName) {
-    if (!(await fs.pathExists(authFilePath))) {
-      throw new Error(`Auth file not found at: ${authFilePath}`);
-    }
-
-    let content = await fs.readFile(authFilePath, "utf8");
-    const startMarker = `// ${providerName} - START`;
-    const endMarker = `// ${providerName} - END`;
-    
-    const startIndex = content.indexOf(startMarker);
-    const endIndex = content.indexOf(endMarker);
-    
-    if (startIndex !== -1 && endIndex !== -1) {
-      const sectionContent = content.substring(startIndex, endIndex + endMarker.length);
-      
-      // Remove comment markers if present
-      const uncommentedSection = sectionContent
-        .replace('/* COMMENTED OUT FOR SELECTIVE PROVIDER SETUP', '')
-        .replace('*/', '');
-      
-      const beforeSection = content.substring(0, startIndex);
-      const afterSection = content.substring(endIndex + endMarker.length);
-      
-      const modifiedContent = beforeSection + uncommentedSection + afterSection;
-      await fs.writeFile(authFilePath, modifiedContent, "utf8");
-      
-      this.logger.info(`✅ Uncommented ${providerName} provider`);
-      return true;
-    }
-    
-    this.logger.warn(`⚠️ Provider section not found: ${providerName}`);
-    return false;
   }
 
 }
