@@ -1,0 +1,46 @@
+{
+  "name": "flowsource-migration-agent",
+  "version": "1.0.0",
+  "description": "AI Agent for automated Backstage to FlowSource application migration",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test src/tests/*.test.js",
+    "lint": "eslint src/",
+    "migrate": "node src/index.js --mode=cli"
+  },
+  "keywords": [
+    "backstage",
+    "flowsource",
+    "migration",
+    "automation",
+    "ai-agent"
+  ],
+  "author": "FlowSource Team",
+  "license": "MIT",
+  "dependencies": {
+    "boxen": "^7.1.1",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1",
+    "figlet": "^1.7.0",
+    "fs-extra": "^11.2.0",
+    "glob": "^10.3.10",
+    "inquirer": "^9.2.12",
+    "joi": "^17.11.0",
+    "js-yaml": "^4.1.0",
+    "markdown-it": "^14.0.0",
+    "ora": "^7.0.1",
+    "winston": "^3.11.0",
+    "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "eslint": "^8.56.0",
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=20.18.3"
+  }
+}
