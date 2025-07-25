@@ -38,6 +38,7 @@ export class GitHubAuth {
         ref.file.toLowerCase().includes("github")
     );
   }
+
   async findAndParseGitHubDoc() {
     try {
       // First try to find the referenced file from AuthConfigure
@@ -229,6 +230,7 @@ export class GitHubAuth {
     await this.copyGitHubAuthFiles();
 
     // Configure frontend App.tsx with GitHub provider (Step 6 from GithubAuth.md)
+    // TESTING: Commented out to test addFrontendProvider() alone
     await this.setupFrontendGitHubProvider();
 
     // Update app configuration with GitHub settings
@@ -310,48 +312,6 @@ export class GitHubAuth {
     if (await fs.pathExists(authSourcePath)) {
       await fs.copy(authSourcePath, authDestPath, { overwrite: true });
       this.logger.info("📄 Copied authentication plugin files");
-    }
-  }
-
-  async handleBackendUpdate(step) {
-    // Update backend index.ts to include auth plugin
-    const backendIndexPath = path.join(
-      this.config.destinationPath,
-      "packages",
-      "backend",
-      "src",
-      "index.ts"
-    );
-
-    if (await fs.pathExists(backendIndexPath)) {
-      let indexContent = await fs.readFile(backendIndexPath, "utf8");
-
-      // Add auth plugin import and registration
-      if (!indexContent.includes("auth")) {
-        const authImport = `import auth from './plugins/auth';`;
-        const authBackend = `  backend.add(import('./plugins/auth'));`;
-
-        // Add import
-        const importRegex = /(import.*from.*plugins.*;\n)/g;
-        const matches = indexContent.match(importRegex);
-        if (matches) {
-          const lastImport = matches[matches.length - 1];
-          indexContent = indexContent.replace(
-            lastImport,
-            lastImport + "\n" + authImport
-          );
-        }
-
-        // Add backend registration
-        const backendStartRegex = /(backend\.start\(\);)/;
-        indexContent = indexContent.replace(
-          backendStartRegex,
-          `${authBackend}\n\n  $1`
-        );
-
-        await fs.writeFile(backendIndexPath, indexContent, "utf8");
-        this.logger.info("📄 Updated backend index.ts with auth plugin");
-      }
     }
   }
 
@@ -534,16 +494,13 @@ export class GitHubAuth {
 
   async applyGitHubCodeConfig(configBlock) {
     const content = configBlock.content;
+    const contentText = this.docParser.contentToText(content).toLowerCase();
 
-    if (content.includes("authProviders.registerProvider")) {
+    // Backend-focused blocks only
+    if (contentText.includes("authproviders.registerprovider")) {
       await this.addProviderRegistration(configBlock);
-    } else if (content.includes("githubResolver")) {
+    } else if (contentText.includes("githubresolver")) {
       await this.addGitHubResolver(configBlock);
-    } else if (content.includes("githubAuthProvider")) {
-      await this.addFrontendProvider(configBlock);
-    } else if (content.includes("githubAuthApiRef")) {
-      // Handle Step 6: GitHub auth API import
-      await this.addGitHubAuthImport(configBlock);
     }
   }
 
@@ -567,166 +524,6 @@ export class GitHubAuth {
     }
   }
 
-  async addGitHubAuthImport(configBlock) {
-    const appTsxPath = path.join(
-      this.config.destinationPath,
-      "packages/app/src/App.tsx"
-    );
-
-    if (await fs.pathExists(appTsxPath)) {
-      let appContent = await fs.readFile(appTsxPath, "utf8");
-      let modified = false;
-
-      // Add GitHub auth API import
-      if (!appContent.includes('githubAuthApiRef')) {
-        // Look for existing core-plugin-api import line to extend it
-        const corePluginApiImportRegex = /import\s+\{([^}]+)\}\s+from\s+["']@backstage\/core-plugin-api["'];/;
-        const match = appContent.match(corePluginApiImportRegex);
-        
-        if (match) {
-          // Add githubAuthApiRef to existing import
-          const currentImports = match[1];
-          const newImports = 'githubAuthApiRef,' + currentImports;
-          const newImportLine = `import {${newImports}} from "@backstage/core-plugin-api";`;
-          
-          appContent = appContent.replace(match[0], newImportLine);
-          modified = true;
-          this.logger.info('📄 Added githubAuthApiRef to existing core-plugin-api import in App.tsx');
-        } else {
-          // Add new import line if no existing core-plugin-api import found
-          const configContentText = this.docParser.contentToText(configBlock.content);
-          const importMatch = configContentText.match(/import\s+.*githubAuthApiRef.*?;/);
-          
-          if (importMatch) {
-            const lastImportMatch = appContent.match(/import[^;]*;(?=\s*\n\s*(?!import))/g);
-            if (lastImportMatch) {
-              const lastImport = lastImportMatch[lastImportMatch.length - 1];
-              const insertIndex = appContent.indexOf(lastImport) + lastImport.length;
-              appContent = appContent.slice(0, insertIndex) + '\n' + importMatch[0] + appContent.slice(insertIndex);
-              modified = true;
-              this.logger.info('📄 Added new GitHub auth import to App.tsx');
-            }
-          }
-        }
-      }
-
-      if (modified) {
-        await fs.writeFile(appTsxPath, appContent, "utf8");
-      }
-    }
-  }
-
-  async addFrontendProvider(configBlock) {
-    const appTsxPath = path.join(
-      this.config.destinationPath,
-      "packages/app/src/App.tsx"
-    );
-
-    if (await fs.pathExists(appTsxPath)) {
-      let appContent = await fs.readFile(appTsxPath, "utf8");
-      const configContentText = this.docParser.contentToText(configBlock.content);
-      let modified = false;
-
-      // Add GitHub auth API import
-      if (!appContent.includes('githubAuthApiRef')) {
-        const importMatch = configContentText.match(/import\s+.*githubAuthApiRef.*?;/);
-        if (importMatch) {
-          const lastImportMatch = appContent.match(/import[^;]*;(?=\s*\n\s*(?!import))/g);
-          if (lastImportMatch) {
-            const lastImport = lastImportMatch[lastImportMatch.length - 1];
-            const insertIndex = appContent.indexOf(lastImport) + lastImport.length;
-            appContent = appContent.slice(0, insertIndex) + '\n' + importMatch[0] + appContent.slice(insertIndex);
-            modified = true;
-            this.logger.info('📄 Added GitHub auth import to App.tsx');
-          }
-        }
-      }
-
-      // Add GitHub provider configuration
-      if (!appContent.includes('githubAuthProvider')) {
-        const githubProviderConfig = `
-const githubAuthProvider: SignInProviderConfig = {
-  id: 'github-auth-provider',
-  title: 'GitHub',
-  message: 'Sign in using GitHub',
-  apiRef: githubAuthApiRef,
-};
-`;
-
-        // Insert before authProviders array or createApp call
-        let insertPoint = appContent.indexOf('const authProviders');
-        if (insertPoint === -1) {
-          insertPoint = appContent.indexOf('const app = createApp(');
-        }
-        
-        if (insertPoint !== -1) {
-          appContent = appContent.slice(0, insertPoint) + githubProviderConfig + '\n' + appContent.slice(insertPoint);
-          modified = true;
-          this.logger.info('📄 Added GitHub provider configuration to App.tsx');
-        }
-      }
-
-      // Update existing authProviders array to include GitHub if not already present
-      if (!appContent.includes('const authProviders')) {
-        const authProvidersConfig = `
-const authProviders: AuthProvider[] = [
-  githubAuthProvider,
-];
-`;
-        
-        const createAppIndex = appContent.indexOf('const app = createApp(');
-        if (createAppIndex !== -1) {
-          appContent = appContent.slice(0, createAppIndex) + authProvidersConfig + '\n' + appContent.slice(createAppIndex);
-          modified = true;
-          this.logger.info('📄 Added authProviders array to App.tsx');
-        }
-      } else {
-        // Update existing authProviders array to include GitHub
-        if (!appContent.includes('githubAuthProvider,') && !appContent.includes('githubAuthProvider]')) {
-          // Find the authProviders array and add GitHub provider
-          const authProvidersRegex = /const authProviders:\s*AuthProvider\[\]\s*=\s*\[([\s\S]*?)\];/;
-          const match = appContent.match(authProvidersRegex);
-          
-          if (match) {
-            const existingProviders = match[1].trim();
-            const newProviders = existingProviders ? `githubAuthProvider,\n  ${existingProviders}` : 'githubAuthProvider,';
-            const newArray = `const authProviders: AuthProvider[] = [
-  ${newProviders}
-];`;
-            appContent = appContent.replace(match[0], newArray);
-            modified = true;
-            this.logger.info('📄 Added GitHub provider to existing authProviders array');
-          }
-        }
-      }
-
-      // Step 6.4: Ensure App.tsx uses the authProviders in createApp if not already present
-      if (!appContent.includes('providers:') && appContent.includes('const authProviders')) {
-        const createAppRegex = /const app = createApp\(\{([\s\S]*?)\}\);/;
-        const match = appContent.match(createAppRegex);
-        
-        if (match) {
-          const existingConfig = match[1].trim();
-          const newConfig = existingConfig ? 
-            `${existingConfig},\n  providers: authProviders,` : 
-            '\n  providers: authProviders,\n';
-          
-          const newCreateApp = `const app = createApp({${newConfig}
-});`;
-          appContent = appContent.replace(match[0], newCreateApp);
-          modified = true;
-          this.logger.info('📄 Added providers configuration to createApp call');
-        }
-      }
-
-      if (modified) {
-        await fs.writeFile(appTsxPath, appContent, "utf8");
-        this.logger.info("✅ Frontend GitHub provider setup completed in App.tsx");
-      } else {
-        this.logger.info("ℹ️ GitHub provider already configured in App.tsx");
-      }
-    }
-  }
 
   async copyGitHubAuthFiles() {
     this.logger.info("🔧 Generating clean auth.ts from documentation...");
@@ -782,68 +579,73 @@ import { githubAuthenticator } from '@backstage/plugin-auth-backend-module-githu
 import { Octokit } from '@octokit/rest';
 import { createAppAuth } from "@octokit/auth-app";
 
-// Custom auth providers module from Auth.md Step 1
-export const customAuthProvidersModule = createBackendModule({
-  pluginId: "auth",
-  moduleId: "custom-auth-providers-module",
-  register(reg) {
-    reg.registerInit({
-      deps: {
-        providers: authProvidersExtensionPoint,
-        config: coreServices.rootConfig,
-        database: coreServices.database,
-        logger: coreServices.logger,
-      },
-      async init({ providers: authProviders, config, database, logger }) {
-        await initDatabase({
-          logger: logger,
-          database: database,
-        });
+let gitHubInstalltionId: number;
 
-        // GitHub provider registration from GithubAuth.md Step 4
-        authProviders.registerProvider({
-          providerId: 'github',
-          factory: createOAuthProviderFactory({
-            authenticator: githubAuthenticator,
-            async signInResolver(info, ctx) {
-              return githubResolver(info, ctx, config, database, logger);
-            },
-          }),
-        });
+function getGithubAppConfig(config: Config) {
+  const gitTokenArray: any[] = config.getOptionalConfigArray('integrations.github') || [];
+  const githubTokenIndex: number = 0;
+  const appIdIndex: number = 0;
+  let githubConfigData = {
+    appId: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].appId,
+    privatekey: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].privateKey,
+    clientId: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].clientId,
+    clientSecret: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].clientSecret
+  };
+  return githubConfigData;
+}
+
+async function fetchInstallationId(config: Config) {
+  if (gitHubInstalltionId != null && gitHubInstalltionId != undefined) {
+    return gitHubInstalltionId;
+  } else {
+    const appOctokit: any = new Octokit({
+      authStrategy: createAppAuth,
+      auth: {
+        appId: getGithubAppConfig(config).appId,
+        privateKey: getGithubAppConfig(config).privatekey,
+        clientId: getGithubAppConfig(config).clientId,
+        clientSecret: getGithubAppConfig(config).clientSecret,
       },
     });
-  },
-});
+    const { data: installations } = await appOctokit.apps.listInstallations();
+    if (installations.length === 0) {
+      throw new Error('No installations found for this app.');
+    }
+    // Assuming you want the first installation ID
+    return installations[0].id;
+  }
+}
 
-// GitHub resolver and utility functions from GithubAuth.md Steps 5 & 8
-export async function githubResolver(
-  info: SignInInfo<GithubOAuthResult> | SignInInfo<OAuthAuthenticatorResult<PassportProfile>>,
-  ctx: AuthResolverContext,
-  config: Config | RootConfigService,
-  database: PluginDatabaseManager,
-  logger: LoggerService
-) {
-  let username: any = info?.result?.fullProfile?.username;
-  let teams: any = await getGithubTeamsOfUser(config, username);
-
-  const db: Knex = await database.getClient();
-  const roleMappingDatabaseService = new RoleMappingDatabaseService(db);
-
-  const userRefs = await getUpdatedUserRefs(teams, 'github', roleMappingDatabaseService);
-  const usernameEntityRef = stringifyEntityRef({
-    kind: 'User',
-    name: username,
-    namespace: DEFAULT_NAMESPACE,
-  });
-  
-  logger.info(\`Resolved user \${username} with \${userRefs.length} userRefs entities\`);
-
-  return ctx.issueToken({
-    claims: {
-      sub: usernameEntityRef, // The user's own identity
-      ent: userRefs
-    },
-  });
+async function getGithubOctokitClient(config: Config): Promise<Octokit> {
+  const gitTokenArray: any[] = config.getConfigArray('integrations.github');
+  //The first github token from the Integration is taken from the app-config.yaml
+  const gitPersonalAccessToken = gitTokenArray[0].data.token;
+  const githubAppTokenArray = gitTokenArray[0].data.apps;
+  let octokit: Octokit;
+  if (gitPersonalAccessToken != null && gitPersonalAccessToken != undefined) {
+    //Create a Octokit client using the GitHub Personal Access token
+    octokit = new Octokit({
+      auth: gitPersonalAccessToken,
+    });
+  } else if (githubAppTokenArray != null && githubAppTokenArray != undefined) {
+    //Create a Octokit client using the GitHub App configuration data
+    const installationId = await fetchInstallationId(config);
+    octokit = new Octokit({
+      authStrategy: createAppAuth,
+      auth: {
+        appId: getGithubAppConfig(config).appId,
+        privateKey: getGithubAppConfig(config).privatekey,
+        clientId: getGithubAppConfig(config).clientId,
+        clientSecret: getGithubAppConfig(config).clientSecret,
+        installationId: installationId,
+      },
+    });
+  } else {
+    //GitApp or GitHub Personal Access token configuration is not found
+    const exceptionMessage = 'GitApp or GitHub Personal Access token configuration in app-config.yaml is not found';
+    throw new Error(exceptionMessage);
+  }
+  return octokit;
 }
 
 async function getGithubTeamsOfUser(config: Config, username: any) {
@@ -892,74 +694,70 @@ async function getGithubTeamsOfUser(config: Config, username: any) {
   return teams;
 }
 
-async function getGithubOctokitClient(config: Config): Promise<Octokit> {
-  const gitTokenArray: any[] = config.getConfigArray('integrations.github');
-  //The first github token from the Integration is taken from the app-config.yaml
-  const gitPersonalAccessToken = gitTokenArray[0].data.token;
-  const githubAppTokenArray = gitTokenArray[0].data.apps;
-  let octokit: Octokit;
-  if (gitPersonalAccessToken != null && gitPersonalAccessToken != undefined) {
-    //Create a Octokit client using the GitHub Personal Access token
-    octokit = new Octokit({
-      auth: gitPersonalAccessToken,
-    });
-  } else if (githubAppTokenArray != null && githubAppTokenArray != undefined) {
-    //Create a Octokit client using the GitHub App configuration data
-    const installationId = await fetchInstallationId(config);
-    octokit = new Octokit({
-      authStrategy: createAppAuth,
-      auth: {
-        appId: getGithubAppConfig(config).appId,
-        privateKey: getGithubAppConfig(config).privatekey,
-        clientId: getGithubAppConfig(config).clientId,
-        clientSecret: getGithubAppConfig(config).clientSecret,
-        installationId: installationId,
+// GitHub resolver and utility functions from GithubAuth.md Steps 5 & 8
+export async function githubResolver(
+  info: SignInInfo<GithubOAuthResult> | SignInInfo<OAuthAuthenticatorResult<PassportProfile>>,
+  ctx: AuthResolverContext,
+  config: Config | RootConfigService,
+  database: PluginDatabaseManager,
+  logger: LoggerService
+) {
+  let username: any = info?.result?.fullProfile?.username;
+  let teams: any = await getGithubTeamsOfUser(config, username);
+
+  const db: Knex = await database.getClient();
+  const roleMappingDatabaseService = new RoleMappingDatabaseService(db);
+
+  const userRefs = await getUpdatedUserRefs(teams, 'github', roleMappingDatabaseService);
+  const usernameEntityRef = stringifyEntityRef({
+    kind: 'User',
+    name: username,
+    namespace: DEFAULT_NAMESPACE,
+  });
+  
+  logger.info(\`Resolved user \${username} with \${userRefs.length} userRefs entities\`);
+
+  return ctx.issueToken({
+    claims: {
+      sub: usernameEntityRef, // The user's own identity
+      ent: userRefs
+    },
+  });
+}
+
+// Custom auth providers module from Auth.md Step 1
+export const customAuthProvidersModule = createBackendModule({
+  pluginId: "auth",
+  moduleId: "custom-auth-providers-module",
+  register(reg) {
+    reg.registerInit({
+      deps: {
+        providers: authProvidersExtensionPoint,
+        config: coreServices.rootConfig,
+        database: coreServices.database,
+        logger: coreServices.logger,
+      },
+      async init({ providers: authProviders, config, database, logger }) {
+        await initDatabase({
+          logger: logger,
+          database: database,
+        });
+
+        // GitHub provider registration from GithubAuth.md Step 4
+        authProviders.registerProvider({
+          providerId: 'github',
+          factory: createOAuthProviderFactory({
+            authenticator: githubAuthenticator,
+            async signInResolver(info, ctx) {
+              return githubResolver(info, ctx, config, database, logger);
+            },
+          }),
+        });
       },
     });
-  } else {
-    //GitApp or GitHub Personal Access token configuration is not found
-    const exceptionMessage = 'GitApp or GitHub Personal Access token configuration in app-config.yaml is not found';
-    throw new Error(exceptionMessage);
-  }
-  return octokit;
-}
+  },
+});
 
-let gitHubInstalltionId: number;
-
-async function fetchInstallationId(config: Config) {
-  if (gitHubInstalltionId != null && gitHubInstalltionId != undefined) {
-    return gitHubInstalltionId;
-  } else {
-    const appOctokit: any = new Octokit({
-      authStrategy: createAppAuth,
-      auth: {
-        appId: getGithubAppConfig(config).appId,
-        privateKey: getGithubAppConfig(config).privatekey,
-        clientId: getGithubAppConfig(config).clientId,
-        clientSecret: getGithubAppConfig(config).clientSecret,
-      },
-    });
-    const { data: installations } = await appOctokit.apps.listInstallations();
-    if (installations.length === 0) {
-      throw new Error('No installations found for this app.');
-    }
-    // Assuming you want the first installation ID
-    return installations[0].id;
-  }
-}
-
-function getGithubAppConfig(config: Config) {
-  const gitTokenArray: any[] = config.getOptionalConfigArray('integrations.github') || [];
-  const githubTokenIndex: number = 0;
-  const appIdIndex: number = 0;
-  let githubConfigData = {
-    appId: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].appId,
-    privatekey: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].privateKey,
-    clientId: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].clientId,
-    clientSecret: gitTokenArray[githubTokenIndex].data.apps[appIdIndex].clientSecret
-  };
-  return githubConfigData;
-}
 `;
   }
 
@@ -1003,12 +801,17 @@ function getGithubAppConfig(config: Config) {
         this.logger.info('📄 Added githubAuthApiRef to existing @backstage/core-plugin-api import');
       } else {
         // Add new import line if no existing @backstage/core-plugin-api import found
-        const importMatch = appContent.match(/import[^;]*;(?=\s*\n\s*(?!import))/g);
-        if (importMatch) {
-          const lastImport = importMatch[importMatch.length - 1];
-          const insertIndex = appContent.indexOf(lastImport) + lastImport.length;
+        // Find the last import statement - handles both single line and multi-line imports
+        let lastImportEnd = 0;
+        const importRegex = /import[\s\S]*?;/g;
+        let importMatch;
+        while ((importMatch = importRegex.exec(appContent)) !== null) {
+          lastImportEnd = importMatch.index + importMatch[0].length;
+        }
+        
+        if (lastImportEnd > 0) {
           const newImport = "\nimport { githubAuthApiRef } from '@backstage/core-plugin-api';";
-          appContent = appContent.slice(0, insertIndex) + newImport + appContent.slice(insertIndex);
+          appContent = appContent.slice(0, lastImportEnd) + newImport + appContent.slice(lastImportEnd);
           modified = true;
           this.logger.info('📄 Added new githubAuthApiRef import to App.tsx');
         }
@@ -1106,25 +909,6 @@ const authProviders: AuthProvider[] = [
           modified = true;
           this.logger.info('📄 Added GitHub provider to existing authProviders array');
         }
-      }
-    }
-
-    // Step 6.4: Ensure App.tsx uses the authProviders in createApp if not already present
-    if (!appContent.includes('providers:') && appContent.includes('const authProviders')) {
-      const createAppRegex = /const app = createApp\(\{([\s\S]*?)\}\);/;
-      const match = appContent.match(createAppRegex);
-      
-      if (match) {
-        const existingConfig = match[1].trim();
-        const newConfig = existingConfig ? 
-          `${existingConfig},\n  providers: authProviders,` : 
-          '\n  providers: authProviders,\n';
-        
-        const newCreateApp = `const app = createApp({${newConfig}
-});`;
-        appContent = appContent.replace(match[0], newCreateApp);
-        modified = true;
-        this.logger.info('📄 Added providers configuration to createApp call');
       }
     }
 

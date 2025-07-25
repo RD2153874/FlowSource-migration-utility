@@ -569,6 +569,13 @@ export class AuthConfigure {
       configBlock.language === "typescript" ||
       configBlock.language === "javascript"
     ) {
+      // Add logging to help track which blocks are being processed
+      const contentText = this.docParser.contentToText(configBlock.content);
+      const isStep1 = this.isStep1AuthFileBlock(contentText);
+      const isStep5 = this.isStep5IndexFileBlock(contentText);
+      
+      this.logger.info(`📝 Processing code block - Step1: ${isStep1}, Step5: ${isStep5}`);
+      
       await this.applyCodeConfiguration(configBlock);
     }
   }
@@ -610,15 +617,29 @@ export class AuthConfigure {
     }
   }
 
-  // Enhance AuthConfigure.js applyCodeConfiguration method
+  // Enhanced AuthConfigure.js applyCodeConfiguration method
   async applyCodeConfiguration(configBlock) {
     const content = configBlock.content;
+    const contentText = this.docParser.contentToText(content);
 
-    if (content.includes("backend.add")) {
+    // Check if this is a Step 1 code block (meant for auth.ts, not index.ts)
+    if (this.isStep1AuthFileBlock(contentText)) {
+      this.logger.info("💻 Skipping Step 1 auth.ts code block (handled by provider-specific setup)");
+      return;
+    }
+
+    // Check if this is a Step 6 deletion block (remove from index.ts)
+    if (this.isStep6DeletionBlock(contentText)) {
+      await this.removeFromBackendIndex(configBlock);
+      return;
+    }
+
+    // Check if this is a Step 5 code block (meant for index.ts)
+    if (this.isStep5IndexFileBlock(contentText)) {
       await this.addToBackendIndex(configBlock);
     } else if (content.includes("createApp")) {
       await this.updateAppComponent(configBlock);
-    } else if (content.includes("import")) {
+    } else if (content.includes("import") && !this.isStep1AuthFileBlock(contentText)) {
       await this.addImportsToFile(configBlock);
     } else {
       this.logger.info("💻 Applied generic code configuration");
@@ -639,11 +660,12 @@ export class AuthConfigure {
       const configContentText = this.docParser.contentToText(configBlock.content);
       let modified = false;
 
-      // Handle import statements
+      // Handle import statements - but only allow Step 5 imports for index.ts
       const importMatches = configContentText.match(/import\s+.*?;/g);
       if (importMatches) {
         for (const importStatement of importMatches) {
-          if (!content.includes(importStatement.trim())) {
+          // Only allow specific imports that are meant for index.ts (Step 5)
+          if (this.isValidIndexImport(importStatement) && !content.includes(importStatement.trim())) {
             // Find the location to insert imports (after the last existing import)
             const lastImportMatch = content.match(/import[^;]*;(?=\s*\n\s*(?!import))/g);
             if (lastImportMatch) {
@@ -653,6 +675,8 @@ export class AuthConfigure {
               modified = true;
               this.logger.info(`📄 Added import to index.ts: ${importStatement}`);
             }
+          } else if (!this.isValidIndexImport(importStatement)) {
+            this.logger.info(`⏭️ Skipping auth.ts import from index.ts: ${importStatement.trim()}`);
           }
         }
       }
@@ -989,7 +1013,7 @@ export class AuthConfigure {
 
     if (modified) {
       await fs.writeFile(appPath, content, "utf8");
-      this.logger.info("✅ App.tsx authentication configuration updated");
+      this.logger.info("📄 Updated App.tsx component");
     } else {
       this.logger.info("✅ App.tsx authentication configuration already complete");
     }
@@ -1082,6 +1106,240 @@ export class AuthConfigure {
         }
       }
     }
+  }
+
+  /**
+   * Detects if a code block is from Step 1 (meant for auth.ts file)
+   * Step 1 blocks contain imports like initDatabase, createBackendModule, etc.
+   */
+  isStep1AuthFileBlock(contentText) {
+    // Step 1 indicators - these imports are meant for auth.ts, not index.ts
+    const step1Indicators = [
+      'initDatabase',
+      'createBackendModule',
+      'authProvidersExtensionPoint',
+      'createOAuthProviderFactory',
+      'OAuthAuthenticatorResult',
+      'PassportProfile',
+      'SignInInfo',
+      'RoleMappingDatabaseService',
+      'EmailToRoleMappingDatabaseService',
+      'customAuthProvidersModule = createBackendModule'
+    ];
+
+    // If it contains multiple Step 1 indicators, it's likely the Step 1 block
+    const matchCount = step1Indicators.filter(indicator => 
+      contentText.includes(indicator)
+    ).length;
+
+    return matchCount >= 3; // Require at least 3 matches to be confident
+  }
+
+  /**
+   * Detects if a code block is from Step 5 (meant for index.ts file)
+   * Step 5 blocks contain specific imports and backend.add statements for index.ts
+   */
+  isStep5IndexFileBlock(contentText) {
+    // Step 5 indicators - these are meant for index.ts
+    const step5Indicators = [
+      'customAuthProvidersModule',
+      'customCatalogAdminPermissionPolicyBackendModule',
+      'from "./plugins/auth"',
+      'from "./plugins/permission"',
+      'backend.add(customAuthProvidersModule)',
+      'backend.add(customCatalogAdminPermissionPolicyBackendModule)'
+    ];
+
+    // Check if it contains Step 5 specific patterns
+    const hasStep5Imports = step5Indicators.some(indicator => 
+      contentText.includes(indicator)
+    );
+
+    // Also check if it has backend.add statements (characteristic of Step 5)
+    const hasBackendAdd = contentText.includes('backend.add(');
+
+    return hasStep5Imports && hasBackendAdd;
+  }
+
+  /**
+   * Validates if an import statement is meant for index.ts (Step 5 imports only)
+   * Only allows imports that are specifically mentioned in Auth.md Step 5
+   */
+  isValidIndexImport(importStatement) {
+    // Only these imports from Step 5 are allowed in index.ts
+    const validIndexImports = [
+      'customAuthProvidersModule',
+      'customCatalogAdminPermissionPolicyBackendModule',
+      './plugins/auth',
+      './plugins/permission'
+    ];
+
+    // Check if the import statement contains any of the valid index.ts imports
+    return validIndexImports.some(validImport => 
+      importStatement.includes(validImport)
+    );
+  }
+
+  async removeFromBackendIndex(configBlock) {
+    const indexPath = path.join(
+      this.config.destinationPath,
+      "packages",
+      "backend",
+      "src",
+      "index.ts"
+    );
+
+    if (await fs.pathExists(indexPath)) {
+      let content = await fs.readFile(indexPath, "utf8");
+      const configContentText = this.docParser.contentToText(configBlock.content);
+      let modified = false;
+
+      // Enhanced deletion logic to handle allow-all-policy variations
+      // Pattern matches: backend.add(import('...' or "..."));  with optional trailing comma
+      const allowAllPolicyPatterns = [
+        // Pattern 1: backend.add(import('@backstage/plugin-permission-backend-module-allow-all-policy'));
+        /backend\.add\(\s*import\(\s*['"]@backstage\/plugin-permission-backend-module-allow-all-policy['"]\s*\)\s*\)\s*,?\s*;?\s*\n?/g,
+        
+        // Pattern 2: Lines with trailing comma: backend.add(import('...'),);
+        /backend\.add\(\s*import\(\s*['"]@backstage\/plugin-permission-backend-module-allow-all-policy['"]\s*\)\s*,\s*\)\s*;?\s*\n?/g,
+        
+        // Pattern 3: Multiline format with proper indentation
+        /\s*backend\.add\(\s*\n?\s*import\(\s*['"]@backstage\/plugin-permission-backend-module-allow-all-policy['"]\s*\)\s*,?\s*\n?\s*\)\s*;?\s*\n?/g,
+        
+        // Pattern 4: Direct import line without backend.add wrapper (edge case)
+        /import\(\s*['"]@backstage\/plugin-permission-backend-module-allow-all-policy['"]\s*\)\s*,?\s*;?\s*\n?/g
+      ];
+
+      // Check for allow-all-policy deletion first (most common case)
+      if (configContentText.includes('allow-all-policy')) {
+        this.logger.info('🔍 Processing allow-all-policy deletion...');
+        
+        for (const pattern of allowAllPolicyPatterns) {
+          const matches = content.match(pattern);
+          if (matches) {
+            for (const match of matches) {
+              content = content.replace(match, '');
+              modified = true;
+              this.logger.info(`🗑️ Removed allow-all-policy line: ${match.trim()}`);
+            }
+          }
+        }
+      }
+
+      // Fallback: Generic backend.add pattern extraction and removal
+      const backendAddMatches = configContentText.match(/backend\.add\([^)]+\);?/g);
+      if (backendAddMatches && !modified) {
+        this.logger.info('🔍 Processing generic backend.add deletion...');
+        
+        for (const backendAdd of backendAddMatches) {
+          // Create flexible regex patterns to handle various formats
+          const packageName = this.extractPackageName(backendAdd);
+          if (packageName) {
+            // Create patterns that handle quote variations, spacing, and trailing commas
+            const flexiblePatterns = [
+              // Standard format: backend.add(import('package'));
+              new RegExp(`backend\\.add\\(\\s*import\\(\\s*['"]${this.escapeRegex(packageName)}['"]\\s*\\)\\s*\\)\\s*;?\\s*\\n?`, 'g'),
+              
+              // With trailing comma: backend.add(import('package'),);
+              new RegExp(`backend\\.add\\(\\s*import\\(\\s*['"]${this.escapeRegex(packageName)}['"]\\s*\\)\\s*,\\s*\\)\\s*;?\\s*\\n?`, 'g'),
+              
+              // With various whitespace: backend.add( import( 'package' ) );
+              new RegExp(`\\s*backend\\.add\\(\\s*import\\(\\s*['"]${this.escapeRegex(packageName)}['"]\\s*\\)\\s*,?\\s*\\)\\s*;?\\s*\\n?`, 'g'),
+              
+              // Multiline format
+              new RegExp(`\\s*backend\\.add\\(\\s*\\n?\\s*import\\(\\s*['"]${this.escapeRegex(packageName)}['"]\\s*\\)\\s*,?\\s*\\n?\\s*\\)\\s*;?\\s*\\n?`, 'g')
+            ];
+            
+            for (const pattern of flexiblePatterns) {
+              const matches = content.match(pattern);
+              if (matches) {
+                for (const match of matches) {
+                  content = content.replace(match, '');
+                  modified = true;
+                  this.logger.info(`🗑️ Removed backend.add line: ${match.trim()}`);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Handle deletion markers: // DELETE: Remove this line from index.ts
+      const deleteMarkerPatterns = [
+        // Single line comment followed by backend.add
+        /\/\/\s*DELETE:.*?\n\s*backend\.add\([^)]+\)\s*,?\s*;?\s*\n?/g,
+        
+        // Multi-line comment with backend.add
+        /\/\*[\s\S]*?DELETE[\s\S]*?\*\/\s*\n?\s*backend\.add\([^)]+\)\s*,?\s*;?\s*\n?/g,
+        
+        // Comment on same line
+        /backend\.add\([^)]+\)\s*,?\s*;?\s*\/\/.*DELETE.*\n?/g
+      ];
+
+      for (const pattern of deleteMarkerPatterns) {
+        const matches = content.match(pattern);
+        if (matches) {
+          for (const match of matches) {
+            content = content.replace(match, '');
+            modified = true;
+            this.logger.info('🗑️ Removed marked deletion line from index.ts');
+          }
+        }
+      }
+
+      // Clean up any excessive empty lines created by deletions
+      content = content.replace(/\n\n\n+/g, '\n\n');
+
+      if (modified) {
+        await fs.writeFile(indexPath, content, "utf8");
+        this.logger.info("📄 Updated backend index.ts (removed unwanted imports)");
+      } else {
+        this.logger.info("ℹ️ No matching lines found to remove from index.ts");
+      }
+    } else {
+      this.logger.warn("⚠️ Backend index.ts not found, cannot remove lines");
+    }
+  }
+
+  // Helper method to extract package name from backend.add statement
+  extractPackageName(backendAddStatement) {
+    const match = backendAddStatement.match(/import\(\s*['"]([^'"]+)['"]\s*\)/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Detects if a code block is from Step 6 (deletion instructions for index.ts)
+   * Step 6 blocks contain DELETE markers and allow-all-policy removal instructions
+   */
+  isStep6DeletionBlock(contentText) {
+    // Step 6 indicators - deletion markers and allow-all-policy references
+    const step6Indicators = [
+      'DELETE:',
+      'Delete',
+      'Remove',
+      'allow-all-policy',
+      'plugin-permission-backend-module-allow-all-policy'
+    ];
+
+    // Must contain deletion language and allow-all-policy reference
+    const hasDeletionMarker = step6Indicators.slice(0, 3).some(indicator => 
+      contentText.includes(indicator)
+    );
+    
+    const hasAllowAllPolicy = step6Indicators.slice(3).some(indicator => 
+      contentText.includes(indicator)
+    );
+
+    // Also check for backend.add with allow-all-policy in deletion context
+    const hasBackendAddWithPolicy = contentText.includes('backend.add(') && 
+                                   contentText.includes('allow-all-policy');
+
+    return (hasDeletionMarker && hasAllowAllPolicy) || hasBackendAddWithPolicy;
+  }
+
+  // Helper method to escape special regex characters
+  escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   // ...existing code...
