@@ -1,6 +1,6 @@
-# FlowSource Migration Agent
+# FlowSource Migration Utility
 
-🚀 Intelligent Utility tool that automates the conversion of Backstage applications into FlowSource applications using official documentation and configuration files.
+🚀 Intelligent utility tool that automates the conversion of Backstage applications into FlowSource applications using official documentation and configuration files.
 
 ## 🎯 Overview
 
@@ -29,8 +29,8 @@ The FlowSource Migration Utility is a Node.js-based automation tool that transfo
 ### Installation
 
 ```bash
-# Clone or download the agent
-cd flowsource-migration-agent
+# Clone or download the utility
+cd flowsource-migration-utility
 
 # Install dependencies
 npm install
@@ -85,11 +85,13 @@ npm run migrate -- \
 - ✅ Configuration file management
 - ❌ No plugins, authentication, or database
 
-### Phase 2: Authentication & Permissions (Coming Soon)
-- 🔒 Multi-provider authentication
-- 👥 Role-based access control
-- 🗄️ Database integration
-- ⚙️ Permission management
+### Phase 2: Authentication & Permissions ✅
+- ✅ Multi-provider authentication setup
+- ✅ Role-based access control configuration  
+- ✅ Database integration and services
+- ✅ Permission management and policies
+- ✅ GitHub OAuth provider setup
+- ✅ Cookie-based authentication
 
 ### Phase 3: Full FlowSource Platform (Coming Soon)
 - 🔌 50+ DevOps plugins
@@ -100,23 +102,31 @@ npm run migrate -- \
 ## 🗂️ Project Structure
 
 ```
-flowsource-migration-agent/
+flowsource-migration-utility/
 ├── src/
 │   ├── index.js                    # Main entry point
 │   ├── core/
 │   │   ├── FlowSourceAgent.js      # Main migration logic
 │   │   ├── BackstageGenerator.js   # Backstage skeleton generation
 │   │   ├── FlowSourceTransformer.js # UI customization engine
+│   │   ├── AuthConfigure.js        # Authentication configuration
+│   │   ├── GitHubAuth.js           # GitHub OAuth provider setup
 │   │   └── ValidationEngine.js     # Migration validation
 │   ├── ui/
 │   │   └── InteractiveMode.js      # User interface
-│   └── utils/
-│       ├── Logger.js               # Centralized logging
-│       ├── FileManager.js          # File operations
-│       ├── DocumentationParser.js  # Markdown parsing
-│       ├── ConfigManager.js        # Configuration handling
-│       └── ConfigValidator.js      # Prerequisites validation
+│   ├── utils/
+│   │   ├── Logger.js               # Centralized logging
+│   │   ├── FileManager.js          # File operations
+│   │   ├── DocumentationParser.js  # Markdown parsing
+│   │   ├── ConfigManager.js        # Configuration handling
+│   │   ├── ConfigValidator.js      # Prerequisites validation
+│   │   ├── YamlConfigMerger.js     # YAML configuration merging
+│   │   └── CLIHelp.js              # Command line help
+│   └── tests/
+│       └── agent.test.js           # Test suite
 ├── logs/                           # Application logs
+├── .env.example                    # Environment variables template
+├── setup.js                       # Setup and initialization
 ├── package.json                    # Dependencies and scripts
 └── README.md                       # This file
 ```
@@ -125,14 +135,16 @@ flowsource-migration-agent/
 
 ### Source Package Structure
 
-The agent expects the FlowSource package to have this structure:
+The utility expects the FlowSource package to have this structure:
 
 ```
 Flowsource_Package_1_0_0/
 ├── FlowSourceInstaller/
 │   └── FlowsourceSetupDoc/
 │       ├── Readme.md               # Main setup guide
-│       └── UI-Changes.md           # UI customization guide
+│       ├── UI-Changes.md           # UI customization guide
+│       ├── Auth.md                 # Authentication setup guide
+│       └── GithubAuth.md           # GitHub OAuth provider guide
 ├── configuration/                  # Configuration files
 │   ├── app-config.yaml
 │   ├── package.json
@@ -154,7 +166,7 @@ MIGRATION_TIMEOUT=300000
 
 ## 📊 Logging
 
-The agent provides comprehensive logging:
+The utility provides comprehensive logging:
 
 - **Console Output**: Real-time progress and status
 - **File Logging**: Detailed logs in `logs/` directory
@@ -167,7 +179,7 @@ The agent provides comprehensive logging:
 
 ## ✅ Validation
 
-The agent performs extensive validation:
+The utility performs extensive validation:
 
 ### Prerequisites Validation
 - ✅ Node.js version compatibility
@@ -181,6 +193,9 @@ The agent performs extensive validation:
 - ✅ Theme integration
 - ✅ Asset availability
 - ✅ Package dependencies
+- ✅ Authentication setup
+- ✅ Database services integration
+- ✅ Permission policies configuration
 
 ## 🐛 Troubleshooting
 
