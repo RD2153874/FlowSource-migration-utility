@@ -384,11 +384,6 @@ export class AuthConfigure {
       ) {
         await this.handleConfigUpdate(step);
       } else if (
-        instruction.includes("add") &&
-        instruction.includes("import")
-      ) {
-        await this.handleImportAddition(step);
-      } else if (
         instruction.includes("remove") &&
         instruction.includes("import")
       ) {
@@ -400,7 +395,6 @@ export class AuthConfigure {
         await this.handlePackageInstallation(step);
       } else {
         this.logger.info(`ℹ️ Generic instruction: ${step.instruction}`);
-        await this.handleGenericInstruction(step);
       }
     } catch (error) {
       this.logger.warn(
@@ -522,20 +516,8 @@ export class AuthConfigure {
     }
   }
 
-  async applyConfigurationChange(filePath, step) {
-    // This is a placeholder for configuration changes
-    // Specific implementation would depend on the actual instruction content
-    this.logger.info(
-      `⚙️ Applied configuration change to ${path.basename(filePath)}`
-    );
-  }
 
-  async handleComponentCreation(step) {
-    // Handle component creation instructions
-    this.logger.info(
-      `🔧 Creating component as per instruction: ${step.instruction}`
-    );
-  }
+
   async handlePackageInstallation(step) {
     // Handle package installation instructions
     const packageMatches = step.instruction.match(/`([^`]+)`/g);
@@ -546,18 +528,6 @@ export class AuthConfigure {
       // Add packages to the installation queue
       this.authProviders.push(...packages);
     }
-  }
-
-  async handleImportAddition(step) {
-    // Handle import addition instructions
-    this.logger.info(
-      `📥 Adding import as per instruction: ${step.instruction}`
-    );
-  }
-
-  async handleGenericInstruction(step) {
-    // Handle generic instructions that don't match specific patterns
-    this.logger.info(`📋 Processing generic instruction: ${step.instruction}`);
   }
 
   async applyConfigurationBlock(configBlock) {
@@ -640,7 +610,9 @@ export class AuthConfigure {
     } else if (content.includes("createApp")) {
       await this.updateAppComponent(configBlock);
     } else if (content.includes("import") && !this.isStep1AuthFileBlock(contentText)) {
+      // TODO: Testing without addImportsToFile - remove comment if needed
       await this.addImportsToFile(configBlock);
+      // this.logger.info("💻 Skipped addImportsToFile call (testing)");
     } else {
       this.logger.info("💻 Applied generic code configuration");
     }
@@ -667,11 +639,21 @@ export class AuthConfigure {
           // Only allow specific imports that are meant for index.ts (Step 5)
           if (this.isValidIndexImport(importStatement) && !content.includes(importStatement.trim())) {
             // Find the location to insert imports (after the last existing import)
-            const lastImportMatch = content.match(/import[^;]*;(?=\s*\n\s*(?!import))/g);
-            if (lastImportMatch) {
-              const lastImport = lastImportMatch[lastImportMatch.length - 1];
-              const insertIndex = content.indexOf(lastImport) + lastImport.length;
-              content = content.slice(0, insertIndex) + '\n' + importStatement + content.slice(insertIndex);
+            const importLines = content.split('\n');
+            let lastImportIndex = -1;
+            
+            // Find the last line that starts with 'import' (handles multi-line imports)
+            for (let i = 0; i < importLines.length; i++) {
+              const line = importLines[i].trim();
+              if (line.startsWith('import ') || line.startsWith('import{') || line.startsWith('import\t')) {
+                lastImportIndex = i;
+              }
+            }
+            
+            if (lastImportIndex !== -1) {
+              // Insert after the last import line
+              importLines.splice(lastImportIndex + 1, 0, importStatement);
+              content = importLines.join('\n');
               modified = true;
               this.logger.info(`📄 Added import to index.ts: ${importStatement}`);
             }
@@ -724,11 +706,21 @@ export class AuthConfigure {
         for (const importStatement of importMatches) {
           if (!content.includes(importStatement.trim())) {
             // Find location to insert imports (after the last existing import)
-            const lastImportMatch = content.match(/import[^;]*;(?=\s*\n\s*(?!import))/g);
-            if (lastImportMatch) {
-              const lastImport = lastImportMatch[lastImportMatch.length - 1];
-              const insertIndex = content.indexOf(lastImport) + lastImport.length;
-              content = content.slice(0, insertIndex) + '\n' + importStatement + content.slice(insertIndex);
+            const importLines = content.split('\n');
+            let lastImportIndex = -1;
+            
+            // Find the last line that starts with 'import' (handles multi-line imports)
+            for (let i = 0; i < importLines.length; i++) {
+              const line = importLines[i].trim();
+              if (line.startsWith('import ') || line.startsWith('import{') || line.startsWith('import\t')) {
+                lastImportIndex = i;
+              }
+            }
+            
+            if (lastImportIndex !== -1) {
+              // Insert after the last import line
+              importLines.splice(lastImportIndex + 1, 0, importStatement);
+              content = importLines.join('\n');
               modified = true;
               this.logger.info(`📄 Added import to App.tsx: ${importStatement}`);
             }
@@ -811,16 +803,24 @@ export class AuthConfigure {
       if (importMatches) {
         importMatches.forEach((importStatement) => {
           if (!content.includes(importStatement)) {
-            // Add import at the top
-            const existingImports = content.match(/^import.*$/gm) || [];
-            const lastImport = existingImports[existingImports.length - 1];
-
-            if (lastImport) {
-              content = content.replace(
-                lastImport,
-                lastImport + "\n" + importStatement
-              );
+            // Find the last import line and add after it
+            const importLines = content.split('\n');
+            let lastImportIndex = -1;
+            
+            // Find the last line that starts with 'import' (handles multi-line imports)
+            for (let i = 0; i < importLines.length; i++) {
+              const line = importLines[i].trim();
+              if (line.startsWith('import ') || line.startsWith('import{') || line.startsWith('import\t')) {
+                lastImportIndex = i;
+              }
+            }
+            
+            if (lastImportIndex !== -1) {
+              // Insert after the last import line
+              importLines.splice(lastImportIndex + 1, 0, importStatement);
+              content = importLines.join('\n');
             } else {
+              // No imports found, add at the beginning
               content = importStatement + "\n" + content;
             }
           }
@@ -931,11 +931,21 @@ export class AuthConfigure {
     for (const req of requiredImports) {
       if (!content.includes(req.check)) {
         // Find the last import line and add after it
-        const lastImportMatch = content.match(/import[^;]*;(?=\s*\n\s*(?!import))/g);
-        if (lastImportMatch) {
-          const lastImport = lastImportMatch[lastImportMatch.length - 1];
-          const insertIndex = content.indexOf(lastImport) + lastImport.length;
-          content = content.slice(0, insertIndex) + '\n' + req.import + content.slice(insertIndex);
+        const importLines = content.split('\n');
+        let lastImportIndex = -1;
+        
+        // Find the last line that starts with 'import' (handles multi-line imports)
+        for (let i = 0; i < importLines.length; i++) {
+          const line = importLines[i].trim();
+          if (line.startsWith('import ') || line.startsWith('import{') || line.startsWith('import\t')) {
+            lastImportIndex = i;
+          }
+        }
+        
+        if (lastImportIndex !== -1) {
+          // Insert after the last import line
+          importLines.splice(lastImportIndex + 1, 0, req.import);
+          content = importLines.join('\n');
           modified = true;
           this.logger.info(`📄 Added import: ${req.import}`);
         }
