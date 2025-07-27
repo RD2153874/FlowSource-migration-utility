@@ -1,7 +1,7 @@
 {
-  "name": "flowsource-migration-agent",
+  "name": "flowsource-migration-utility",
   "version": "1.0.0",
-  "description": "AI Agent for automated Backstage to FlowSource application migration",
+  "description": "Utility for automated migration from Backstage to FlowSource.",
   "main": "src/index.js",
   "type": "module",
   "scripts": {

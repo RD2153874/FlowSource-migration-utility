@@ -20,8 +20,8 @@ const logger = Logger.getInstance();
 // ASCII Art Header
 function displayHeader() {
   console.log(
-    chalk.blue(
-      figlet.textSync("FlowSource Agent", {
+    chalk.cyanBright(
+      figlet.textSync("FlowSource Migration Utility", {
         font: "Small",
         horizontalLayout: "default",
         verticalLayout: "default",
@@ -48,8 +48,8 @@ function displayHeader() {
 
 // CLI Configuration
 program
-  .name("flowsource-agent")
-  .description("AI Agent for automated Backstage to FlowSource migration")
+  .name("flowsource-migration-utility")
+  .description("Utility for automated migration from Backstage to FlowSource.")
   .version("1.0.0");
 
 program
@@ -89,7 +89,7 @@ program.action(async (options) => {
       logger.setLevel("debug");
     }
 
-    logger.info("🤖 FlowSource Migration Agent initialized");
+    logger.info("🤖 FlowSource Migration Utility initialized");
     logger.info(`📋 Mode: ${options.mode}`);
     logger.info(`🎯 Phase: ${options.phase}`);
 

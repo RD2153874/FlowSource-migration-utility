@@ -14,8 +14,8 @@ export class InteractiveMode {
 
   async start() {
     console.log(
-      chalk.blue(
-        "🤖 Welcome to FlowSource Migration Agent - Interactive Mode\n"
+      chalk.cyanBright(
+        "🤖 Welcome to FlowSource Migration Utility - Interactive Mode\n"
       )
     );
 
@@ -50,7 +50,7 @@ export class InteractiveMode {
         type: "input",
         name: "sourcePath",
         message: "📂 Enter the FlowSource package source path:",
-        default: "C:\\Agent\\Flowsource_Package_1_0_0",
+        default: "C:\\ReleasePackages\\Flowsource_Package_1_0_0",
         validate: async (input) => {
           const normalizedPath = path.resolve(input);
           const exists = await fs.pathExists(normalizedPath);
@@ -80,10 +80,14 @@ export class InteractiveMode {
         type: "input",
         name: "destinationPath",
         message: "🎯 Enter the destination path for the new application:",
-        default: (answers) => path.join(process.cwd(), "my-flowsource-app"),
+        default: (answers) => path.join(path.dirname(process.cwd()), "generated-apps", "flwsrc-app-v1"),
         validate: async (input) => {
           const normalizedPath = path.resolve(input);
           const parentDir = path.dirname(normalizedPath);
+
+          // Ensure the generated-apps directory exists
+          const generatedAppsDir = path.join(path.dirname(process.cwd()), "generated-apps");
+          await fs.ensureDir(generatedAppsDir);
 
           // Check if parent directory exists
           if (!(await fs.pathExists(parentDir))) {
@@ -111,7 +115,7 @@ export class InteractiveMode {
         type: "input",
         name: "applicationName",
         message: "📝 Enter the application name:",
-        default: "flowsource-app",
+        default: "flwsrc-app-v1",
         validate: (input) => {
           if (!input.trim()) {
             return "Application name cannot be empty.";
@@ -133,11 +137,11 @@ export class InteractiveMode {
             value: 1,
           },
           {
-            name: "Phase 2: Add authentication and permissions",
+            name: "Phase 2: Add authentication, permissions & database configuration",
             value: 2,
           },
           {
-            name: "Phase 3: Full FlowSource with plugins and database (Coming soon)",
+            name: "Phase 3: Full FlowSource with Plugins (Coming soon)",
             value: 3,
             disabled: "Available in future releases",
           },
