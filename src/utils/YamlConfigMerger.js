@@ -39,10 +39,21 @@ export default class YamlConfigMerger {
           // Special handling for auth providers - merge provider objects
           result[key] = { ...result[key], ...source[key] };
         } else if (key === 'github' && Array.isArray(source[key]) && Array.isArray(result[key])) {
-          // Special handling for GitHub integrations - avoid duplicates
-          const existingHosts = result[key].map(item => item.host);
-          const newIntegrations = source[key].filter(item => !existingHosts.includes(item.host));
-          result[key] = [...result[key], ...newIntegrations];
+          // Special handling for GitHub integrations - replace existing entries for same host
+          const resultIntegrations = [...result[key]];
+          
+          source[key].forEach(sourceIntegration => {
+            const existingIndex = resultIntegrations.findIndex(item => item.host === sourceIntegration.host);
+            if (existingIndex !== -1) {
+              // Replace existing integration for the same host (this allows real tokens to overwrite placeholders)
+              resultIntegrations[existingIndex] = sourceIntegration;
+            } else {
+              // Add new integration for different host
+              resultIntegrations.push(sourceIntegration);
+            }
+          });
+          
+          result[key] = resultIntegrations;
         } else if (
           typeof source[key] === 'object' && 
           source[key] !== null && 

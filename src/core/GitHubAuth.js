@@ -433,44 +433,83 @@ export class GitHubAuth {
       const blockContentText = this.docParser.contentToText(configBlock.content);
       let configContent = blockContentText;
 
-      // Replace placeholders with actual values
+      // Check if we have real credentials for integration (PAT or GitHub App)
+      const hasRealPAT = this.githubConfig.personalAccessToken && 
+                        this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
+                        !this.githubConfig.requiresManualSetup;
+      
+      const hasRealGitHubApp = this.githubConfig.githubApp && 
+                              this.githubConfig.githubApp.appId && 
+                              !this.githubConfig.requiresManualSetup;
+
+      this.logger.info(`🔍 Analyzing YAML config block - hasRealPAT: ${hasRealPAT}, hasRealGitHubApp: ${hasRealGitHubApp}`);
+      this.logger.info(`🔍 PAT value: ${this.githubConfig.personalAccessToken ? `${this.githubConfig.personalAccessToken.substring(0, 5)}...` : 'null'}`);
+      this.logger.info(`🔍 requiresManualSetup: ${this.githubConfig.requiresManualSetup}`);
+      this.logger.info(`🔍 Integration method: ${this.githubConfig.integrationMethod}`);
+
+      // **KEY FIX**: Skip irrelevant YAML blocks based on user's selected integration method
+      const isGitHubAppBlock = configContent.includes('apps:') || configContent.includes('appId:') || configContent.includes('privateKey:');
+      const isPATBlock = configContent.includes('token:') && !configContent.includes('apps:');
+      
+      this.logger.info(`🔍 Block type detection - isGitHubAppBlock: ${isGitHubAppBlock}, isPATBlock: ${isPATBlock}`);
+      
+      // Skip GitHub App blocks if user selected PAT authentication
+      if (isGitHubAppBlock && this.githubConfig.integrationMethod === 'pat') {
+        this.logger.info("⏭️ Skipping GitHub App configuration block - user selected PAT authentication");
+        return;
+      }
+      
+      // Skip PAT blocks if user selected GitHub App authentication  
+      if (isPATBlock && this.githubConfig.integrationMethod === 'github-app') {
+        this.logger.info("⏭️ Skipping PAT configuration block - user selected GitHub App authentication");
+        return;
+      }
+
+      // Enhanced Pattern Matching - Replace placeholders with actual values
+      // Each pattern handles multiple common variations in one comprehensive regex
       configContent = configContent
-        // Handle environment variable style placeholders
-        .replace(/\$\{GITHUB_CLIENT_ID\}/g, this.githubConfig.clientId)
-        .replace(/\$\{GITHUB_CLIENT_SECRET\}/g, this.githubConfig.clientSecret)
-        .replace(/\$\{AUTH_GITHUB_CLIENT_ID\}/g, this.githubConfig.clientId)
-        .replace(/\$\{AUTH_GITHUB_CLIENT_SECRET\}/g, this.githubConfig.clientSecret)
-        // Handle angle bracket style placeholders from documentation
-        .replace(/<GitHub client ID>/g, this.githubConfig.clientId)
-        .replace(/<GitHub client secret>/g, this.githubConfig.clientSecret)
-        .replace(/<GITHUB_CLIENT_ID>/g, this.githubConfig.clientId)
-        .replace(/<GITHUB_CLIENT_SECRET>/g, this.githubConfig.clientSecret)
-        .replace(/<GITHUB_APP_CLIENT_ID>/g, this.githubConfig.clientId)
-        .replace(/<GITHUB_APP_CLIENT_SECRET>/g, this.githubConfig.clientSecret)
-        // Handle organization placeholders
-        .replace(/<GitHub organization>/g, this.githubConfig.organization || '')
-        .replace(/<GITHUB_ORGANIZATION>/g, this.githubConfig.organization || '')
-        .replace(/TheCognizantFoundry/g, this.githubConfig.organization || 'TheCognizantFoundry')
-        // Handle other common placeholders - use actual credentials when available
-        .replace(/<add your github personal access token>/g, 
-          this.githubConfig.personalAccessToken && 
-          this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
-          !this.githubConfig.requiresManualSetup 
-            ? this.githubConfig.personalAccessToken 
-            : '${GITHUB_TOKEN}')
-        .replace(/<GITHUB_APP_APP_ID>/g, 
+        // GitHub Client ID patterns (environment variables, angle brackets, descriptive text)
+        .replace(/(\$\{GITHUB_CLIENT_ID\}|\$\{AUTH_GITHUB_CLIENT_ID\}|<GITHUB_CLIENT_ID>|<GITHUB_APP_CLIENT_ID>|<GitHub client ID>|<Github Client ID>)/g, this.githubConfig.clientId)
+        
+        // GitHub Client Secret patterns
+        .replace(/(\$\{GITHUB_CLIENT_SECRET\}|\$\{AUTH_GITHUB_CLIENT_SECRET\}|<GITHUB_CLIENT_SECRET>|<GITHUB_APP_CLIENT_SECRET>|<GitHub client secret>|<Github Client Secret>)/g, this.githubConfig.clientSecret)
+        
+        // GitHub Organization patterns
+        .replace(/(<GitHub organization>|<GITHUB_ORGANIZATION>|<Github Organization>|TheCognizantFoundry)/g, this.githubConfig.organization || 'TheCognizantFoundry')
+        
+        // Personal Access Token patterns - use actual credentials when available
+        .replace(/(\$\{GITHUB_TOKEN\}|<add your github personal access token>|<GITHUB_TOKEN>|<GitHub Token>|<Github Token>|<your github token>)/g, 
+          hasRealPAT ? this.githubConfig.personalAccessToken : '${GITHUB_TOKEN}')
+        
+        // GitHub App ID patterns
+        .replace(/(<GITHUB_APP_APP_ID>|<GitHub App ID>|<Github App ID>|<github app id>)/g, 
           this.githubConfig.githubApp?.appId || '${GITHUB_APP_APP_ID}')
-        .replace(/<GITHUB_APP_PRIVATE_KEY>/g, 
-          this.githubConfig.githubApp?.privateKey && 
-          !this.githubConfig.requiresManualSetup 
-            ? this.githubConfig.githubApp.privateKey 
-            : '${GITHUB_APP_PRIVATE_KEY}');
+        
+        // GitHub App Private Key patterns
+        .replace(/(<GITHUB_APP_PRIVATE_KEY>|<GitHub App Private Key>|<Github App Private Key>|<github app private key>)/g, 
+          hasRealGitHubApp ? this.githubConfig.githubApp.privateKey : '${GITHUB_APP_PRIVATE_KEY}');
+
+      this.logger.info(`🔍 Config content after replacements: ${configContent.substring(0, 200)}...`);
 
       try {
         // Parse the YAML configuration from the content
         const yamlConfig = this.yamlMerger.extractYamlFromMarkdown('```yaml\n' + configContent + '\n```');
         
         if (Object.keys(yamlConfig).length > 0) {
+          this.logger.info(`🔍 Parsed YAML config: ${JSON.stringify(yamlConfig, null, 2)}`);
+          
+          // **KEY FIX**: Remove integration section if no real credentials for integration
+          if (yamlConfig.integrations && yamlConfig.integrations.github && !hasRealPAT && !hasRealGitHubApp) {
+            this.logger.info("🔧 Removing GitHub integration section - OAuth-only setup detected");
+            delete yamlConfig.integrations.github;
+            // If no other integrations, remove the entire integrations section
+            if (Object.keys(yamlConfig.integrations).length === 0) {
+              delete yamlConfig.integrations;
+            }
+          }
+
+          this.logger.info(`🔍 Final YAML config to be merged: ${JSON.stringify(yamlConfig, null, 2)}`);
+
           // Merge into existing app-config.yaml using the YAML merger
           const success = await this.yamlMerger.mergeIntoYamlFile(
             appConfigPath, 
@@ -927,16 +966,53 @@ const authProviders: AuthProvider[] = [
     );
 
     if (await fs.pathExists(appConfigPath)) {
-      // Simple check - only skip if we already have a complete GitHub configuration
+      // Enhanced check - only skip if we have complete GitHub configuration with real values
       const existingConfig = await fs.readFile(appConfigPath, "utf8");
       
-      // Check if we already have both OAuth and some form of integration configured
-      const hasOAuth = existingConfig.includes("clientId: " + this.githubConfig.clientId);
-      const hasIntegration = existingConfig.includes("integrations:") && existingConfig.includes("github:");
-      
-      if (hasOAuth && hasIntegration) {
-        this.logger.info("ℹ️ GitHub authentication already configured in app-config.yaml");
+      // Option A: Value-Aware Detection - Check for actual credential values
+      const hasRealOAuth = existingConfig.includes("clientId: " + this.githubConfig.clientId) && 
+                           existingConfig.includes("clientSecret: " + this.githubConfig.clientSecret);
+
+      const hasRealPAT = this.githubConfig.personalAccessToken && 
+                         existingConfig.includes("token: " + this.githubConfig.personalAccessToken);
+
+      const hasRealGitHubApp = this.githubConfig.githubApp?.appId && 
+                               existingConfig.includes("appId: " + this.githubConfig.githubApp.appId);
+
+      const hasRealIntegration = hasRealPAT || hasRealGitHubApp;
+
+      // Option B: Placeholder Detection - Check if any placeholders remain
+      const hasPlaceholders = existingConfig.includes("${GITHUB_TOKEN}") || 
+                              existingConfig.includes("${AUTH_GITHUB_CLIENT_ID}") ||
+                              existingConfig.includes("${AUTH_GITHUB_CLIENT_SECRET}") ||
+                              existingConfig.includes("${GITHUB_APP_CLIENT_SECRET}") ||
+                              existingConfig.includes("${GITHUB_APP_PRIVATE_KEY}") ||
+                              existingConfig.includes("${GITHUB_APP_APP_ID}");
+
+      // Define variables for proper logging
+      const hasRealAppCredentials = this.githubConfig.githubApp?.clientSecret && 
+                                    this.githubConfig.githubApp?.privateKey &&
+                                    !this.githubConfig.requiresManualSetup;
+
+      const hasRealToken = this.githubConfig.personalAccessToken && 
+                           this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
+                           !this.githubConfig.requiresManualSetup;
+
+      // Only skip if we have real OAuth credentials AND real integration AND no placeholders
+      if (hasRealOAuth && hasRealIntegration && !hasPlaceholders) {
+        this.logger.info("ℹ️ GitHub authentication already fully configured with real values in app-config.yaml");
         return;
+      }
+
+      // Log what we're going to fix
+      if (!hasRealOAuth) {
+        this.logger.info("🔧 OAuth credentials need to be updated with real values");
+      }
+      if (!hasRealIntegration) {
+        this.logger.info("🔧 GitHub integration needs to be updated with real values");
+      }
+      if (hasPlaceholders) {
+        this.logger.info("🔧 Found placeholders that need to be replaced with actual values");
       }
 
       // SIMPLIFIED APPROACH THAT WORKED IN genv1
@@ -968,7 +1044,7 @@ const authProviders: AuthProvider[] = [
               development: {
                 clientId: clientId,
                 clientSecret: clientSecret,
-                callbackUrl: this.githubConfig.callbackUrl
+                // callbackUrl: this.githubConfig.callbackUrl
               }
             }
           }
@@ -980,7 +1056,8 @@ const authProviders: AuthProvider[] = [
         githubAuthConfig.auth.providers.github.development.githubOrganization = this.githubConfig.organization;
       }
 
-      // Configure GitHub integrations - SIMPLIFIED LOGIC
+      // Configure GitHub integrations - SMART LOGIC
+      // Only create integration section if we actually have integration credentials
       if (this.githubConfig.githubApp && this.githubConfig.githubApp.appId) {
         // GitHub App integration
         githubAuthConfig.integrations = {
@@ -999,24 +1076,23 @@ const authProviders: AuthProvider[] = [
           ]
         };
         this.logger.info("🔧 Configured GitHub App integration with appId: " + this.githubConfig.githubApp.appId);
-      } else {
-        // Default to PAT integration (always create this section)
-        const tokenToUse = this.githubConfig.personalAccessToken || '${GITHUB_TOKEN}';
-        
+      } else if (this.githubConfig.personalAccessToken && 
+                 this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
+                 !this.githubConfig.requiresManualSetup) {
+        // Personal Access Token integration - only if we have a real token
         githubAuthConfig.integrations = {
           github: [
             {
               host: 'github.com',
-              token: tokenToUse
+              token: this.githubConfig.personalAccessToken
             }
           ]
         };
-        
-        if (this.githubConfig.personalAccessToken) {
-          this.logger.info("🔧 Configured Personal Access Token integration with actual token");
-        } else {
-          this.logger.info("🔧 Configured Personal Access Token integration with environment variable placeholder");
-        }
+        this.logger.info("🔧 Configured Personal Access Token integration with actual token");
+      } else {
+        // OAuth-only setup - no integration section needed
+        this.logger.info("🔧 OAuth-only authentication configured - no GitHub integration section needed");
+        this.logger.info("ℹ️ This is suitable for basic GitHub OAuth authentication without repository access");
       }
 
       // Merge the GitHub configuration into the existing app-config.yaml
@@ -1049,7 +1125,7 @@ const authProviders: AuthProvider[] = [
         }
 
         // Log integration method used
-        if (this.githubConfig.githubApp) {
+        if (this.githubConfig.githubApp && this.githubConfig.githubApp.appId) {
           this.logger.info("🔧 ✅ GitHub App integration configured successfully");
           this.logger.info(`   📋 App ID: ${this.githubConfig.githubApp.appId}`);
           this.logger.info(`   📋 Client ID: ${this.githubConfig.githubApp.clientId}`);
@@ -1058,13 +1134,15 @@ const authProviders: AuthProvider[] = [
           } else {
             this.logger.warn("   ⚠️ Remember to set GITHUB_APP_CLIENT_SECRET and GITHUB_APP_PRIVATE_KEY environment variables");
           }
-        } else if (this.githubConfig.personalAccessToken) {
+        } else if (this.githubConfig.personalAccessToken && 
+                   this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
+                   !this.githubConfig.requiresManualSetup) {
           this.logger.info("🔧 ✅ Personal Access Token integration configured successfully");
-          if (hasRealToken) {
-            this.logger.info("✅ Using actual Personal Access Token");
-          } else {
-            this.logger.warn("   ⚠️ Remember to set GITHUB_TOKEN environment variable");
-          }
+          this.logger.info("✅ Using actual Personal Access Token");
+        } else {
+          this.logger.info("🔧 ✅ OAuth-only authentication configured successfully");
+          this.logger.info("ℹ️ No GitHub integration configured - using OAuth credentials only");
+          this.logger.info("ℹ️ This setup is perfect for user authentication without repository access");
         }
       } else {
         this.logger.error("❌ Failed to update app-config.yaml with GitHub authentication");
