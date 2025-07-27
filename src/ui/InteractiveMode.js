@@ -3,6 +3,7 @@ import inquirer from "inquirer";
 import path from "path";
 import fs from "fs-extra";
 import chalk from "chalk";
+import crypto from "crypto";
 import { Logger } from "../utils/Logger.js";
 
 export class InteractiveMode {
@@ -22,8 +23,10 @@ export class InteractiveMode {
       // Collect user inputs
       const config = await this.collectUserInputs();
 
-      // ADD: Collect GitHub auth config for Phase 2
+      // Collect authentication configuration for Phase 2
       if (config.phase === 2) {
+        await this.collectDatabaseConfig(config);
+        await this.collectAuthConfig(config);
         await this.collectGitHubAuthConfig(config);
       }
 
@@ -183,6 +186,37 @@ export class InteractiveMode {
     console.log(
       `${chalk.gray("Auto Install:")} ${config.autoInstall ? "Yes" : "No"}`
     );
+    
+    // Show Phase 2 specific configuration
+    if (config.phase === 2) {
+      console.log("\n" + chalk.blue("🔐 Authentication & Database Configuration:"));
+      
+      // Database configuration
+      if (config.databaseConfig) {
+        if (config.databaseConfig.usePostgreSQL) {
+          console.log(`${chalk.gray("Database:")} PostgreSQL`);
+          console.log(`${chalk.gray("DB Host:")} ${config.databaseConfig.host}:${config.databaseConfig.port}`);
+          console.log(`${chalk.gray("DB User:")} ${config.databaseConfig.user}`);
+        } else {
+          console.log(`${chalk.gray("Database:")} SQLite (development)`);
+        }
+      }
+      
+      // Backend authentication
+      if (config.backendAuth) {
+        console.log(`${chalk.gray("Backend Secret:")} [CONFIGURED]`);
+        console.log(`${chalk.gray("Session Secret:")} ${config.backendAuth.hasCustomSessionSecret ? '[CONFIGURED]' : '[PLACEHOLDER]'}`);
+      }
+      
+      // GitHub authentication
+      if (config.githubAuth && config.githubAuth.setupGitHubAuth) {
+        console.log(`${chalk.gray("GitHub Auth:")} Enabled`);
+        console.log(`${chalk.gray("GitHub App ID:")} ${config.githubAuth.appId}`);
+        console.log(`${chalk.gray("Client ID:")} ${config.githubAuth.clientId}`);
+      } else {
+        console.log(`${chalk.gray("GitHub Auth:")} Disabled`);
+      }
+    }
 
     const { proceed } = await inquirer.prompt([
       {
@@ -218,9 +252,88 @@ export class InteractiveMode {
     console.log("4. Open: " + chalk.cyan("http://localhost:3000"));
     console.log("\n" + chalk.gray("Enjoy your new FlowSource application! 🚀"));
   }
-  // collectGitHubAuthConfig
-  // Method to collect Github Auth config
-  // Add this method to InteractiveMode class
+  // collectAuthConfig
+  // Method to collect authentication configuration including backend secrets
+  async collectAuthConfig(config) {
+    if (config.phase < 2) {
+      return;
+    }
+
+    console.log("\n" + chalk.cyan("🔐 Phase 2: Authentication Configuration"));
+    
+    // Collect backend secrets
+    await this.collectBackendSecrets(config);
+  }
+
+
+  // collectBackendSecrets: Method to collect backend authentication secrets
+  async collectBackendSecrets(config) {
+    console.log("\n" + chalk.yellow("🔑 Backend Authentication Secrets"));
+    console.log(chalk.gray("Backend secret is required for authentication. Session secret is optional."));
+
+    const secretQuestions = [
+      {
+        type: "input",
+        name: "backendSecret",
+        message: "Enter backend authentication secret (or press Enter to use auto-generated):",
+        default: () => this.generateSecureSecret(),
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Backend secret is required";
+          }
+          return true;
+        },
+      },
+      {
+        type: "confirm",
+        name: "provideSessionSecret",
+        message: "Do you want to provide a custom session secret?",
+        default: false,
+      },
+      {
+        type: "input",
+        name: "sessionSecret",
+        message: "Enter session secret (or press Enter to use auto-generated):",
+        when: (answers) => answers.provideSessionSecret,
+        default: () => this.generateSecureSecret(),
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Session secret cannot be empty if you choose to provide one";
+          }
+          return true;
+        },
+      }
+    ];
+
+    const secretAnswers = await Promise.race([
+      inquirer.prompt(secretQuestions),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Backend secrets input timeout")), 300000)
+      ),
+    ]);
+
+    // Store backend secrets in config
+    config.backendAuth = {
+      backendSecret: secretAnswers.backendSecret.trim(),
+      sessionSecret: secretAnswers.provideSessionSecret ? secretAnswers.sessionSecret.trim() : null,
+      hasCustomSessionSecret: secretAnswers.provideSessionSecret || false
+    };
+
+    console.log("\n" + chalk.green("✅ Backend authentication secrets configured"));
+    if (config.backendAuth.hasCustomSessionSecret) {
+      console.log(chalk.gray("✓ Custom session secret provided"));
+    } else {
+      console.log(chalk.gray("✓ Session secret will remain as placeholder"));
+    }
+  }
+
+  // Generate secure secret using the specified crypto function
+  generateSecureSecret() {
+    return crypto.randomBytes(24).toString('base64');
+  }
+
+
+  // collectGitHubAuthConfig: Method to collect Github Auth config
 
   async collectGitHubAuthConfig(config) {
     if (config.phase < 2) {
@@ -505,5 +618,128 @@ export class InteractiveMode {
         privateKey: githubAppAnswers.privateKey.trim(),
       }
     };
+  }
+
+  // collectDatabaseConfig: Method to collect database configuration (PostgreSQL or SQLite)
+  async collectDatabaseConfig(config) {
+    if (config.phase < 2) {
+      return;
+    }
+
+    console.log("\n" + chalk.cyan("🗄️  Database Configuration"));
+    console.log(chalk.gray("FlowSource supports PostgreSQL for production use or SQLite for development."));
+
+    const databaseTypeQuestion = [
+      {
+        type: "list",
+        name: "databaseType",
+        message: "Which database would you like to configure?",
+        choices: [
+          {
+            name: "PostgreSQL (Recommended for production)",
+            value: "postgresql",
+          },
+          {
+            name: "SQLite (Development/testing only)",
+            value: "sqlite",
+          },
+        ],
+        default: "postgresql",
+      }
+    ];
+
+    const databaseTypeAnswer = await inquirer.prompt(databaseTypeQuestion);
+    
+    if (databaseTypeAnswer.databaseType === "postgresql") {
+      await this.collectPostgreSQLConfig(config);
+    } else {
+      // For SQLite, we just set a flag to indicate no PostgreSQL config needed
+      config.databaseConfig = {
+        type: "sqlite",
+        usePostgreSQL: false
+      };
+      console.log("\n" + chalk.green("✅ SQLite database configured (no additional setup required)"));
+      console.log(chalk.gray("Note: SQLite is suitable for development but PostgreSQL is recommended for production"));
+    }
+  }
+
+  // collectPostgreSQLConfig: Method to collect PostgreSQL connection details
+  async collectPostgreSQLConfig(config) {
+    console.log("\n" + chalk.yellow("🐘 PostgreSQL Configuration"));
+    console.log(chalk.gray("Enter your PostgreSQL connection details. Press Enter to use defaults where available."));
+
+    const postgresQuestions = [
+      {
+        type: "input",
+        name: "host",
+        message: "PostgreSQL host:",
+        default: "localhost",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Database host is required";
+          }
+          return true;
+        },
+      },
+      {
+        type: "input",
+        name: "port",
+        message: "PostgreSQL port:",
+        default: "5432",
+        validate: (input) => {
+          const port = parseInt(input);
+          if (isNaN(port) || port < 1 || port > 65535) {
+            return "Please enter a valid port number (1-65535)";
+          }
+          return true;
+        },
+      },
+      {
+        type: "input",
+        name: "user",
+        message: "PostgreSQL username:",
+        default: "postgres",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Database username is required";
+          }
+          return true;
+        },
+      },
+      {
+        type: "password",
+        name: "password",
+        message: "PostgreSQL password:",
+        mask: "*",
+        validate: (input) => {
+          if (!input || input.trim().length === 0) {
+            return "Database password is required";
+          }
+          return true;
+        },
+      }
+    ];
+
+    const postgresAnswers = await Promise.race([
+      inquirer.prompt(postgresQuestions),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("PostgreSQL configuration input timeout")), 300000)
+      ),
+    ]);
+
+    // Store database configuration
+    config.databaseConfig = {
+      type: "postgresql",
+      usePostgreSQL: true,
+      host: postgresAnswers.host.trim(),
+      port: parseInt(postgresAnswers.port.trim(), 10),
+      user: postgresAnswers.user.trim(),
+      password: postgresAnswers.password.trim()
+    };
+
+    console.log("\n" + chalk.green("✅ PostgreSQL database configuration collected"));
+    console.log(chalk.gray(`✓ Host: ${config.databaseConfig.host}:${config.databaseConfig.port}`));
+    console.log(chalk.gray(`✓ User: ${config.databaseConfig.user}`));
+    console.log(chalk.gray("✓ Password: [HIDDEN]"));
   }
 }

@@ -563,9 +563,49 @@ export class AuthConfigure {
         const blockContentText = this.docParser.contentToText(configBlock.content);
         
         // Parse the YAML configuration from the content
-        const yamlConfig = this.yamlMerger.extractYamlFromMarkdown('```yaml\n' + blockContentText + '\n```');
+        let yamlConfig = this.yamlMerger.extractYamlFromMarkdown('```yaml\n' + blockContentText + '\n```');
         
         if (Object.keys(yamlConfig).length > 0) {
+          // Prepare replacement map for all placeholders
+          const replacements = {};
+          
+          // Replace backend secret placeholders with real values if available
+          if (this.config.backendAuth) {
+            replacements['${BACKEND_SECRET}'] = this.config.backendAuth.backendSecret;
+            replacements['${AUTH_SESSION_SECRET}'] = this.config.backendAuth.hasCustomSessionSecret 
+              ? this.config.backendAuth.sessionSecret 
+              : '${AUTH_SESSION_SECRET}'; // Keep placeholder if no custom session secret
+          }
+          
+          // Replace database placeholders with real values if PostgreSQL is configured
+          if (this.config.databaseConfig && this.config.databaseConfig.usePostgreSQL) {
+            replacements['${DB_HOST}'] = this.config.databaseConfig.host;
+            replacements['${DB_PORT}'] = this.config.databaseConfig.port;
+            replacements['${DB_USER}'] = this.config.databaseConfig.user;
+            replacements['${DB_PASSWORD}'] = this.config.databaseConfig.password;
+          }
+          
+          // Apply all replacements
+          if (Object.keys(replacements).length > 0) {
+            yamlConfig = this.replacePlaceholders(yamlConfig, replacements);
+            
+            // Log what was replaced
+            if (this.config.backendAuth) {
+              this.logger.info("🔑 Replaced backend secret placeholders with real values");
+              if (this.config.backendAuth.hasCustomSessionSecret) {
+                this.logger.info("🔑 Replaced session secret placeholder with custom value");
+              } else {
+                this.logger.info("ℹ️ Session secret placeholder preserved (no custom value provided)");
+              }
+            }
+            
+            if (this.config.databaseConfig && this.config.databaseConfig.usePostgreSQL) {
+              this.logger.info("🗄️ Replaced database placeholders with PostgreSQL configuration");
+              this.logger.info(`   ✓ Host: ${this.config.databaseConfig.host}:${this.config.databaseConfig.port}`);
+              this.logger.info(`   ✓ User: ${this.config.databaseConfig.user}`);
+            }
+          }
+          
           // Merge into existing app-config.yaml using the YAML merger
           const success = await this.yamlMerger.mergeIntoYamlFile(
             appConfigPath, 
@@ -1352,5 +1392,40 @@ export class AuthConfigure {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  // ...existing code...
+  /**
+   * Replace placeholders in a configuration object with real values
+   * @param {object} obj - Configuration object that may contain placeholders
+   * @param {object} replacements - Map of placeholder strings to replacement values
+   * @returns {object} Configuration object with placeholders replaced
+   */
+  replacePlaceholders(obj, replacements) {
+    try {
+      // Convert object to JSON string for easy placeholder replacement
+      let jsonStr = JSON.stringify(obj);
+      
+      // Replace each placeholder with its corresponding value
+      for (const [placeholder, value] of Object.entries(replacements)) {
+        if (value && placeholder !== value) { // Only replace if value is different from placeholder
+          // Use global regex to replace all occurrences
+          const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+          
+          // Handle numeric values specially to preserve their type in JSON
+          if (typeof value === 'number') {
+            // For numbers, replace the quoted placeholder with unquoted number
+            const quotedRegex = new RegExp(`"${placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'g');
+            jsonStr = jsonStr.replace(quotedRegex, value.toString());
+          } else {
+            // For strings, do normal replacement
+            jsonStr = jsonStr.replace(regex, value);
+          }
+        }
+      }
+      
+      // Parse back to object
+      return JSON.parse(jsonStr);
+    } catch (error) {
+      this.logger.error("❌ Failed to replace placeholders:", error.message);
+      return obj; // Return original object if replacement fails
+    }
+  }
 }
