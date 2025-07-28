@@ -218,7 +218,7 @@ export class InteractiveMode {
         console.log(`${chalk.gray("GitHub App ID:")} ${config.githubAuth.appId}`);
         console.log(`${chalk.gray("Client ID:")} ${config.githubAuth.clientId}`);
       } else {
-        console.log(`${chalk.gray("GitHub Auth:")} Disabled`);
+        console.log(`${chalk.gray("GitHub App Auth:")} Disabled`);
       }
     }
 

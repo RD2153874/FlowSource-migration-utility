@@ -45,6 +45,9 @@ export class FlowSourceAgent {
     const spinner = ora("🚀 Starting FlowSource migration...").start();
 
     try {
+      // Store config for summary display
+      this.migrationConfig = config;
+      
       // Set default non-interactive mode if not specified
       if (config.nonInteractive === undefined) {
         config.nonInteractive = true; // Default to non-interactive mode to prevent hangs
@@ -60,6 +63,11 @@ export class FlowSourceAgent {
       // Phase 1: Basic migration without plugins, auth, and database
       // Phase 2: Migration with Authentication & Permissions
       if (config.phase === 1) {
+        // Reset migration state for Phase 1
+        this.migrationState.currentStep = 0;
+        this.migrationState.totalSteps = 0;
+        this.migrationState.errors = [];
+        this.migrationState.warnings = [];
         await this.executePhase1(config, spinner);
       } else if (config.phase === 2) {
         await this.executePhase2(config, spinner);
@@ -88,7 +96,7 @@ export class FlowSourceAgent {
   async executePhase2(config, spinner) {
     // Reset migration state for Phase 2
     this.migrationState.currentStep = 0;
-    this.migrationState.totalSteps = 12; // Phase 1 (8) + Phase 2 (4) steps
+    this.migrationState.totalSteps = 11; // Phase 1 (8) + Phase 2 (4) steps
     this.migrationState.errors = [];
     this.migrationState.warnings = [];
 
@@ -149,7 +157,10 @@ export class FlowSourceAgent {
 
   // PHASE 1
   async executePhase1(config, spinner) {
-    this.migrationState.totalSteps = 8;
+    // Set totalSteps if not already set (for standalone Phase 1 or Phase 2 that needs Phase 1)
+    if (this.migrationState.totalSteps === 0) {
+      this.migrationState.totalSteps = 8;
+    }
 
     // Step 1: Validate source paths and documentation
     await this.executeStep(
@@ -235,7 +246,13 @@ export class FlowSourceAgent {
     const stepNumber = this.migrationState.currentStep;
     const totalSteps = this.migrationState.totalSteps;
 
-    spinner.text = chalk.blue(`[${stepNumber}/${totalSteps}] ${message}`);
+    // Safety check: Ensure step counter doesn't exceed total steps
+    if (stepNumber > totalSteps) {
+      this.logger.warn(`⚠️ Step counter (${stepNumber}) exceeds total steps (${totalSteps}). Adjusting total steps.`);
+      this.migrationState.totalSteps = stepNumber;
+    }
+
+    spinner.text = chalk.blue(`[${stepNumber}/${this.migrationState.totalSteps}] ${message}`);
     this.logger.info(`Step ${stepNumber}: ${message}`);
 
     try {
@@ -598,7 +615,7 @@ export class FlowSourceAgent {
       await this.executePhase1(config, spinner);
     } else {
       this.logger.info("✅ Phase 1 already completed, proceeding with Phase 2");
-      // Update step counter to reflect completed Phase 1
+      // Update step counter to reflect completed Phase 1 steps (8 steps)
       this.migrationState.currentStep = 8;
     }
   }
@@ -767,19 +784,33 @@ export class FlowSourceAgent {
     console.log("2. Run: yarn install (if not auto-installed)");
 
     if (this.options.phase >= 2) {
-      console.log(
-        "3. Configure GitHub OAuth App at: https://github.com/settings/applications/new"
-      );
-      console.log(
-        "4. Update app-config.yaml with your GitHub OAuth credentials"
-      );
-      console.log("5. Run: yarn dev");
-      console.log("6. Open: http://localhost:3000");
-      console.log("\n" + chalk.cyan("🔐 Authentication Setup:"));
-      console.log("- Homepage URL: http://localhost:3000");
-      console.log(
-        "- Authorization callback URL: http://localhost:3000/api/auth/github/handler/frame"
-      );
+      // Check if Phase 2 configuration is complete
+      const hasBackendAuth = this.migrationConfig && this.migrationConfig.backendAuth;
+      const hasDatabaseConfig = this.migrationConfig && this.migrationConfig.databaseConfig;
+      const hasGitHubAuth = this.migrationConfig && this.migrationConfig.githubAuth && !this.migrationConfig.githubAuth.requiresManualSetup;
+      
+      if (hasBackendAuth && hasDatabaseConfig && hasGitHubAuth) {
+        console.log("3. ✅ app-config.yaml setup already completed with:");
+        console.log("   - Database configuration");
+        console.log("   - Backend authentication secrets");
+        console.log("   - GitHub authentication & PAT integration");
+        console.log("4. Run: yarn dev");
+        console.log("5. Open: http://localhost:3000");
+      } else {
+        console.log("3. Manually update app-config.yaml with missing configuration:");
+        if (!hasBackendAuth) {
+          console.log("   - Backend authentication secrets (BACKEND_SECRET, AUTH_SESSION_SECRET)");
+        }
+        if (!hasDatabaseConfig) {
+          console.log("   - Database connection details (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD)");
+        }
+        if (!hasGitHubAuth) {
+          console.log("   - GitHub OAuth credentials and Personal Access Token");
+        }
+        console.log("4. Run: yarn dev");
+        console.log("5. Open: http://localhost:3000");
+      }
+      
     } else {
       console.log("3. Run: yarn dev");
       console.log("4. Open: http://localhost:3000");

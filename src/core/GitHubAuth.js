@@ -236,8 +236,8 @@ export class GitHubAuth {
     // Update app configuration with GitHub settings
     await this.updateAppConfigWithGitHub();
 
-    // Update package.json files with GitHub auth dependencies
-    await this.updatePackageJsonForGitHub();
+    // Update package.json files with GitHub auth dependencies --> Commented out to not add unecessary dependencies
+    // await this.updatePackageJsonForGitHub();
 
     this.logger.info("✅ GitHub authentication instructions implemented");
   }
@@ -1162,7 +1162,6 @@ const authProviders: AuthProvider[] = [
       const appPackage = await fs.readJson(appPackagePath);
 
       const authDependencies = {
-        "@backstage/plugin-auth": "^1.4.0",
         "@backstage/plugin-auth-react": "^0.1.0",
       };
 
@@ -1185,9 +1184,9 @@ const authProviders: AuthProvider[] = [
       const backendPackage = await fs.readJson(backendPackagePath);
 
       let authBackendDependencies = {
-        "@backstage/plugin-auth-backend": "^0.18.0",
-        "@backstage/plugin-auth-node": "^0.2.0",
-        "@backstage/plugin-auth-backend-module-github-provider": "^0.1.0",
+        "@backstage/plugin-auth-backend": "^0.24.3",
+        "@backstage/plugin-auth-node": "^0.6.0",
+        "@backstage/plugin-auth-backend-module-github-provider": "^0.3.0",
       };
 
       backendPackage.dependencies = {
