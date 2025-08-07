@@ -10,6 +10,7 @@ import { FlowSourceTransformer } from "./FlowSourceTransformer.js";
 import { ValidationEngine } from "./ValidationEngine.js";
 import { AuthConfigure } from "./AuthConfigure.js";
 import { GitHubAuth } from "./GitHubAuth.js";
+import YamlConfigMerger from "../utils/YamlConfigMerger.js";
 import { execSync } from "child_process";
 import ora from "ora";
 import chalk from "chalk";
@@ -24,6 +25,9 @@ export class FlowSourceAgent {
     this.transformer = new FlowSourceTransformer();
     this.validator = new ValidationEngine();
     this.interactiveMode = null;
+
+    // Create shared YamlConfigMerger instance for consolidating all config blocks
+    this.sharedYamlMerger = new YamlConfigMerger(this.logger);
 
     this.options = {
       dryRun: false,
@@ -96,7 +100,7 @@ export class FlowSourceAgent {
   async executePhase2(config, spinner) {
     // Reset migration state for Phase 2
     this.migrationState.currentStep = 0;
-    this.migrationState.totalSteps = 11; // Phase 1 (8) + Phase 2 (4) steps
+    this.migrationState.totalSteps = 12; // Phase 1 (8) + Phase 2 (5) steps - updated for dual config
     this.migrationState.errors = [];
     this.migrationState.warnings = [];
 
@@ -106,20 +110,15 @@ export class FlowSourceAgent {
     // Phase 2 specific steps - Authentication & Permissions
     this.logger.info("🔐 Starting Phase 2: Authentication & Permissions");
 
-    // ADD: Collect GitHub credentials if in interactive mode
-    if (this.interactiveMode && !config.githubAuth) {
-      await this.executeStep(
-        spinner,
-        "Collecting GitHub authentication credentials...",
-        async () => {
-          await Promise.race([
-            this.interactiveMode.collectGitHubAuthConfig(config),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('GitHub config timeout')), 120000)
-            )
-          ]);
-        }
-      );
+    // Note: In interactive mode, authentication provider selection and credential collection
+    // is handled in InteractiveMode.start() before calling migrate(). This step is only 
+    // needed for CLI mode or when credentials weren't collected in interactive mode.
+    if (this.interactiveMode && !config.githubAuth && config.selectedAuthProvider === 'github') {
+      // Interactive mode should have already collected GitHub credentials
+      this.logger.info("ℹ️ GitHub credentials should have been collected in interactive mode");
+    } else if (!this.interactiveMode && !config.githubAuth) {
+      // CLI mode - need to collect GitHub credentials (future enhancement)
+      this.logger.info("ℹ️ CLI mode GitHub authentication not yet implemented");
     }
 
     // Step 9: Parse README and validate authentication requirements
@@ -151,6 +150,15 @@ export class FlowSourceAgent {
       "Validating authentication configuration...",
       async () => {
         await this.validateAuthenticationSetup(config);
+      }
+    );
+
+    // Step 13: Create dual configuration files (template and local versions)
+    await this.executeStep(
+      spinner,
+      "Creating dual configuration files...",
+      async () => {
+        await this.createDualConfigurationFiles(config);
       }
     );
   }
@@ -689,12 +697,13 @@ export class FlowSourceAgent {
       return;
     }
 
-    // Initialize AuthConfigure class
+    // Initialize AuthConfigure class with shared YamlConfigMerger
     this.authConfigure = new AuthConfigure(
       config,
       this.logger,
       this.docParser,
-      this.fileManager
+      this.fileManager,
+      this.sharedYamlMerger
     );
 
     // Execute authentication configuration
@@ -714,7 +723,8 @@ export class FlowSourceAgent {
         this.logger,
         this.docParser,
         this.fileManager,
-        this.authConfigure
+        this.authConfigure,
+        this.sharedYamlMerger
       );
       await this.gitHubAuth.setup();
     }
@@ -749,6 +759,89 @@ export class FlowSourceAgent {
     }
 
     this.logger.info("✅ Authentication configuration validated successfully");
+  }
+
+  async createDualConfigurationFiles(config) {
+    if (!config.requiresAuthentication) {
+      this.logger.info("ℹ️ No authentication configured - skipping dual config file creation");
+      return;
+    }
+
+    this.logger.info("🔄 Creating dual configuration files...");
+    
+    // Check if dual mode is enabled on the shared yaml merger
+    const dualSummary = this.sharedYamlMerger.getDualConfigSummary();
+    this.logger.info(`📊 Shared YamlMerger dual config status: ${dualSummary.message}`);
+    
+    if (!dualSummary.dualModeEnabled) {
+      this.logger.info("ℹ️ Dual mode not enabled - no user-provided values detected across all components");
+      return;
+    }
+
+    try {
+      // Create dual configuration files using the shared merger with all consolidated blocks
+      const result = await this.sharedYamlMerger.buildDualConfigFiles(config.destinationPath);
+      
+      if (result.success) {
+        this.logger.info("🎉 Dual configuration files created successfully!");
+        this.logger.info("📄 The following configuration files are now available:");
+        
+        if (result.templatePath && await fs.pathExists(result.templatePath)) {
+          this.logger.info("   📄 app-config.yaml - Main configuration for deployment (with placeholders)");
+        }
+        
+        if (result.localPath && await fs.pathExists(result.localPath)) {
+          this.logger.info("   📄 app-config.local.yaml - Local configuration with your actual values");
+        }
+
+        this.logger.info("💡 Usage recommendations:");
+        this.logger.info("   � Use app-config.yaml for deployment environments (contains placeholders)");
+        this.logger.info("   🔹 Use app-config.local.yaml for local development (contains actual values)");
+        this.logger.info("   🔹 Add app-config.local.yaml to .gitignore to protect secrets");
+        
+        // Update migration summary
+        this.migrationState.configFiles = {
+          template: result.templatePath,
+          local: result.localPath,
+          dualModeEnabled: true
+        };
+      } else {
+        this.logger.warn(`⚠️ Dual configuration creation failed: ${result.reason || result.error}`);
+        this.migrationState.warnings.push(`Dual configuration creation failed: ${result.reason || result.error}`);
+      }
+    } catch (error) {
+      this.logger.error(`❌ Error creating dual configuration files: ${error.message}`);
+      this.migrationState.warnings.push(`Dual configuration creation failed: ${error.message}`);
+    }
+  }
+
+  async validateDualConfigStructure(destinationPath) {
+    try {
+      const templatePath = path.join(destinationPath, "app-config.yaml");
+      const localPath = path.join(destinationPath, "app-config.local.yaml");
+      
+      if (await fs.pathExists(templatePath) && await fs.pathExists(localPath)) {
+        // Use YamlConfigMerger validation if available through authConfigure
+        if (this.authConfigure && this.authConfigure.yamlMerger && 
+            typeof this.authConfigure.yamlMerger.validateDualConfigStructure === 'function') {
+          
+          const validation = await this.authConfigure.yamlMerger.validateDualConfigStructure(destinationPath);
+          
+          if (validation.isValid) {
+            this.logger.info("✅ Dual configuration structure validation passed");
+            this.logger.info("   🔹 Both app-config.yaml and app-config.local.yaml have identical structure");
+          } else {
+            this.logger.warn("⚠️ Dual configuration structure validation failed:");
+            this.logger.warn(`   🔹 ${validation.message}`);
+            this.migrationState.warnings.push(`Dual config structure mismatch: ${validation.message}`);
+          }
+        } else {
+          this.logger.info("ℹ️ Basic dual config files exist - detailed validation not available");
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`⚠️ Could not validate dual config structure: ${error.message}`);
+    }
   }
 
   // Migration summary display for Phase 1 & 2
@@ -789,15 +882,32 @@ export class FlowSourceAgent {
       const hasDatabaseConfig = this.migrationConfig && this.migrationConfig.databaseConfig;
       const hasGitHubAuth = this.migrationConfig && this.migrationConfig.githubAuth && !this.migrationConfig.githubAuth.requiresManualSetup;
       
+      // Display dual configuration information if available
+      if (this.dualConfigResults && this.dualConfigResults.anyCreated) {
+        console.log("\n" + chalk.green("📄 Dual Configuration Files:"));
+        console.log("   ✅ Created both main and local configuration files");
+        console.log("   📄 app-config.yaml - Main configuration for deployment (with placeholders)");
+        console.log("   📄 app-config.local.yaml - Local configuration with your actual values");
+        console.log("\n" + chalk.blue("💡 Configuration Usage:"));
+        console.log("   🔹 Use app-config.yaml for deployment (contains placeholders like ${ENV_VAR})");
+        console.log("   🔹 Use app-config.local.yaml for local development (contains your actual values)");
+        console.log("   🔹 Add app-config.local.yaml to .gitignore to protect credentials");
+      }
+      
       if (hasBackendAuth && hasDatabaseConfig && hasGitHubAuth) {
-        console.log("3. ✅ app-config.yaml setup already completed with:");
+        console.log("\n3. ✅ app-config.yaml setup already completed with:");
         console.log("   - Database configuration");
         console.log("   - Backend authentication secrets");
         console.log("   - GitHub authentication & PAT integration");
+        
+        if (this.dualConfigResults && this.dualConfigResults.anyCreated) {
+          console.log("   - Dual configuration files for deployment flexibility");
+        }
+        
         console.log("4. Run: yarn dev");
         console.log("5. Open: http://localhost:3000");
       } else {
-        console.log("3. Manually update app-config.yaml with missing configuration:");
+        console.log("\n3. Manually update app-config.yaml with missing configuration:");
         if (!hasBackendAuth) {
           console.log("   - Backend authentication secrets (BACKEND_SECRET, AUTH_SESSION_SECRET)");
         }

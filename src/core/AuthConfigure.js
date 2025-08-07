@@ -3,18 +3,24 @@ import fs from "fs-extra";
 import YamlConfigMerger from "../utils/YamlConfigMerger.js";
 
 export class AuthConfigure {
-  constructor(config, logger, docParser, fileManager) {
+  constructor(config, logger, docParser, fileManager, sharedYamlMerger = null) {
     this.config = config;
     this.logger = logger;
     this.docParser = docParser;
     this.fileManager = fileManager;
     this.authDocumentation = null;
-    this.yamlMerger = new YamlConfigMerger(logger);
+    // Use shared YamlConfigMerger if provided, otherwise create new instance for backward compatibility
+    this.yamlMerger = sharedYamlMerger || new YamlConfigMerger(logger);
     this.authProviders = [];
   }
 
   async configure() {
     this.logger.info("🔐 Starting authentication configuration...");
+
+    // Enable dual configuration mode if this is Phase 2 with user inputs
+    if (this.shouldEnableDualMode()) {
+      this.enableDualConfigMode();
+    }
 
     // Step 1: Find and parse Auth.md
     await this.findAndParseAuthDoc();
@@ -566,6 +572,12 @@ export class AuthConfigure {
         let yamlConfig = this.yamlMerger.extractYamlFromMarkdown('```yaml\n' + blockContentText + '\n```');
         
         if (Object.keys(yamlConfig).length > 0) {
+          // Store template version for dual configuration (before replacement)
+          if (this.yamlMerger.dualMode) {
+            this.yamlMerger.addTemplateBlock(yamlConfig);
+            this.logger.debug("📝 Stored template configuration block (with placeholders)");
+          }
+
           // Prepare replacement map for all placeholders
           const replacements = {};
           
@@ -604,6 +616,12 @@ export class AuthConfigure {
               this.logger.info(`   ✓ Host: ${this.config.databaseConfig.host}:${this.config.databaseConfig.port}`);
               this.logger.info(`   ✓ User: ${this.config.databaseConfig.user}`);
             }
+          }
+
+          // Store value version for dual configuration (after replacement)
+          if (this.yamlMerger.dualMode) {
+            this.yamlMerger.addValueBlock(yamlConfig);
+            this.logger.debug("📝 Stored value configuration block (with real values)");
           }
           
           // Merge into existing app-config.yaml using the YAML merger
@@ -1427,5 +1445,77 @@ export class AuthConfigure {
       this.logger.error("❌ Failed to replace placeholders:", error.message);
       return obj; // Return original object if replacement fails
     }
+  }
+
+  /**
+   * Enable dual configuration mode for creating both template and local config files
+   */
+  enableDualConfigMode() {
+    this.yamlMerger.enableDualMode();
+    this.logger.info("🔄 Dual configuration mode enabled in AuthConfigure");
+  }
+
+  /**
+   * Disable dual configuration mode
+   */
+  disableDualConfigMode() {
+    this.yamlMerger.disableDualMode();
+    this.logger.info("🔄 Dual configuration mode disabled in AuthConfigure");
+  }
+
+  /**
+   * Create dual configuration files from accumulated template and value blocks
+   * @returns {object} Result of dual configuration creation
+   */
+  /**
+   * @deprecated This method is deprecated. Dual configuration creation is now handled centrally by FlowSourceAgent using a shared YamlConfigMerger.
+   */
+  async createDualConfigurations() {
+    this.logger.warn("⚠️ AuthConfigure.createDualConfigurations() is deprecated. Dual configuration creation is now handled centrally.");
+    return {
+      success: false,
+      reason: "Method deprecated - using centralized dual configuration creation"
+    };
+  }
+
+  /**
+   * Get summary of dual configuration status
+   * @returns {object} Summary of configuration files and their status
+   */
+  getDualConfigSummary() {
+    if (!this.yamlMerger.dualMode) {
+      return {
+        dualModeEnabled: false,
+        message: "Dual configuration mode not enabled"
+      };
+    }
+
+    return {
+      dualModeEnabled: true,
+      templateBlocksCount: this.yamlMerger.templateBlocks.length,
+      valueBlocksCount: this.yamlMerger.valueBlocks.length,
+      message: `Tracked ${this.yamlMerger.templateBlocks.length} template blocks and ${this.yamlMerger.valueBlocks.length} value blocks`
+    };
+  }
+
+  /**
+   * Determine if dual configuration mode should be enabled based on available user inputs
+   * @returns {boolean} True if dual mode should be enabled
+   */
+  shouldEnableDualMode() {
+    // Enable dual mode if we have user-provided configuration that would create real values
+    const hasBackendAuth = this.config.backendAuth && this.config.backendAuth.backendSecret;
+    const hasDatabaseConfig = this.config.databaseConfig && this.config.databaseConfig.usePostgreSQL;
+    const hasGitHubAuth = this.config.githubAuth && this.config.githubAuth.clientId;
+    
+    const shouldEnable = hasBackendAuth || hasDatabaseConfig || hasGitHubAuth;
+    
+    if (shouldEnable) {
+      this.logger.debug("🔍 Dual mode criteria met - user has provided configuration values");
+    } else {
+      this.logger.debug("🔍 Dual mode not needed - no user configuration values to separate");
+    }
+    
+    return shouldEnable;
   }
 }

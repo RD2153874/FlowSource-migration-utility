@@ -3,7 +3,7 @@ import fs from "fs-extra";
 import YamlConfigMerger from "../utils/YamlConfigMerger.js";
 
 export class GitHubAuth {
-  constructor(config, logger, docParser, fileManager, authConfigure) {
+  constructor(config, logger, docParser, fileManager, authConfigure, sharedYamlMerger = null) {
     this.config = config;
     this.logger = logger;
     this.docParser = docParser;
@@ -11,8 +11,104 @@ export class GitHubAuth {
     this.authConfigure = authConfigure;
     this.githubDocumentation = null;
     this.githubConfig = {};
-    this.yamlMerger = new YamlConfigMerger(logger);
+    // Use shared YamlConfigMerger if provided, otherwise create new instance for backward compatibility
+    this.yamlMerger = sharedYamlMerger || new YamlConfigMerger(logger);
   }
+
+  // ===== DUAL CONFIGURATION METHODS =====
+  
+  /**
+   * Enable dual configuration mode for GitHub authentication
+   * This creates both template and value versions of config files
+   */
+  enableDualConfigMode() {
+    if (this.yamlMerger && typeof this.yamlMerger.enableDualMode === 'function') {
+      this.yamlMerger.enableDualMode();
+      this.logger.info("🔄 GitHub dual configuration mode enabled");
+      return true;
+    }
+    this.logger.warn("⚠️ Cannot enable dual mode - YamlConfigMerger does not support it");
+    return false;
+  }
+
+  /**
+   * Disable dual configuration mode
+   */
+  disableDualConfigMode() {
+    if (this.yamlMerger && typeof this.yamlMerger.disableDualMode === 'function') {
+      this.yamlMerger.disableDualMode();
+      this.logger.info("🔄 GitHub dual configuration mode disabled");
+    }
+  }
+
+  /**
+   * Check if dual configuration mode should be enabled
+   * Auto-enables if user-provided GitHub values are detected
+   */
+  shouldEnableDualMode() {
+    if (!this.githubConfig) return false;
+
+    // Check for user-provided OAuth credentials
+    const hasRealOAuth = this.githubConfig.clientId && 
+                        this.githubConfig.clientSecret &&
+                        this.githubConfig.clientId !== "YOUR_GITHUB_CLIENT_ID" &&
+                        this.githubConfig.clientSecret !== "YOUR_GITHUB_CLIENT_SECRET" &&
+                        !this.githubConfig.requiresManualSetup;
+
+    // Check for user-provided integration credentials
+    const hasRealPAT = this.githubConfig.personalAccessToken && 
+                       this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
+                       !this.githubConfig.requiresManualSetup;
+
+    const hasRealGitHubApp = this.githubConfig.githubApp?.appId && 
+                            this.githubConfig.githubApp?.clientSecret &&
+                            this.githubConfig.githubApp?.privateKey &&
+                            !this.githubConfig.requiresManualSetup;
+
+    const shouldEnable = hasRealOAuth || hasRealPAT || hasRealGitHubApp;
+    
+    if (shouldEnable) {
+      this.logger.info("🔍 GitHub user-provided values detected - dual config mode recommended");
+      this.logger.info(`   📋 Real OAuth: ${hasRealOAuth}`);
+      this.logger.info(`   📋 Real PAT: ${hasRealPAT}`);
+      this.logger.info(`   📋 Real GitHub App: ${hasRealGitHubApp}`);
+    }
+
+    return shouldEnable;
+  }
+
+  /**
+   * @deprecated This method is deprecated. Dual configuration creation is now handled centrally by FlowSourceAgent using a shared YamlConfigMerger.
+   */
+  async createDualConfigurations(destinationPath) {
+    this.logger.warn("⚠️ GitHubAuth.createDualConfigurations() is deprecated. Dual configuration creation is now handled centrally.");
+    return {
+      success: false,
+      reason: "Method deprecated - using centralized dual configuration creation"
+    };
+  }
+
+  /**
+   * Get summary of dual configuration status for GitHub
+   */
+  getDualConfigSummary() {
+    if (!this.yamlMerger || typeof this.yamlMerger.getDualModeStatus !== 'function') {
+      return {
+        enabled: false,
+        reason: 'YamlConfigMerger dual mode not available'
+      };
+    }
+
+    const status = this.yamlMerger.getDualModeStatus();
+    return {
+      enabled: status.enabled,
+      templateBlocks: status.templateBlocks?.length || 0,
+      valueBlocks: status.valueBlocks?.length || 0,
+      component: 'GitHubAuth'
+    };
+  }
+
+  // ===== END DUAL CONFIGURATION METHODS =====
 
   async setup() {
     // Expect complete credentials to be provided by InteractiveMode
@@ -22,6 +118,11 @@ export class GitHubAuth {
 
     this.githubConfig = this.config.githubAuth;
     this.logger.info("🤖 Using provided GitHub credentials");
+
+    // Enable dual configuration mode if user-provided values are detected
+    if (this.shouldEnableDualMode()) {
+      this.enableDualConfigMode();
+    }
 
     // Skip credential collection, go straight to implementation
     await this.implementGitHubInstructions();
@@ -465,28 +566,50 @@ export class GitHubAuth {
         return;
       }
 
-      // Enhanced Pattern Matching - Replace placeholders with actual values
-      // Each pattern handles multiple common variations in one comprehensive regex
+      // STEP 1: Create template version with proper environment variable placeholders
+      let templateContent = configContent
+        // Convert old placeholder syntax to proper environment variables for template
+        .replace(/(\$\{GITHUB_PAT_TOKEN\}|<add your github personal access token>|<GITHUB_TOKEN>|<GitHub Token>|<Github Token>|<your github token>)/g, '${GITHUB_TOKEN}')
+        .replace(/(\$\{GITHUB_CLIENT_ID\}|\$\{AUTH_GITHUB_CLIENT_ID\}|<GITHUB_CLIENT_ID>|<GITHUB_APP_CLIENT_ID>|<GitHub client ID>|<Github Client ID>)/g, '${GITHUB_CLIENT_ID}')
+        .replace(/(\$\{GITHUB_CLIENT_SECRET\}|\$\{AUTH_GITHUB_CLIENT_SECRET\}|<GITHUB_CLIENT_SECRET>|<GITHUB_APP_CLIENT_SECRET>|<GitHub client secret>|<Github Client Secret>)/g, '${GITHUB_CLIENT_SECRET}')
+        .replace(/(\$\{GITHUB_ORGANIZATION\}|<GitHub organization>|<GITHUB_ORGANIZATION>|<Github Organization>|TheCognizantFoundry)/g, '${GITHUB_ORGANIZATION}')
+        .replace(/(\$\{GITHUB_APP_ID\}|<GITHUB_APP_APP_ID>|<GitHub App ID>|<Github App ID>|<github app id>)/g, '${GITHUB_APP_ID}')
+        .replace(/(\$\{GITHUB_APP_PRIVATE_KEY\}|<GITHUB_APP_PRIVATE_KEY>|<GitHub App Private Key>|<Github App Private Key>|<github app private key>)/g, '${GITHUB_APP_PRIVATE_KEY}');
+
+      // Track template version (with environment variable placeholders) for dual config mode
+      if (this.yamlMerger && typeof this.yamlMerger.addTemplateBlock === 'function') {
+        try {
+          const templateYamlConfig = this.yamlMerger.extractYamlFromMarkdown('```yaml\n' + templateContent + '\n```');
+          if (Object.keys(templateYamlConfig).length > 0) {
+            this.yamlMerger.addTemplateBlock(templateYamlConfig, "GitHub Authentication Configuration (Template)");
+            this.logger.debug("🔄 Tracked GitHub template config block for dual mode with environment variable placeholders");
+          }
+        } catch (error) {
+          this.logger.debug(`⚠️ Could not track GitHub template block: ${error.message}`);
+        }
+      }
+
+      // STEP 2: Create value version with real user-provided values
       configContent = configContent
-        // GitHub Client ID patterns (environment variables, angle brackets, descriptive text)
+        // GitHub Client ID patterns - replace with real values
         .replace(/(\$\{GITHUB_CLIENT_ID\}|\$\{AUTH_GITHUB_CLIENT_ID\}|<GITHUB_CLIENT_ID>|<GITHUB_APP_CLIENT_ID>|<GitHub client ID>|<Github Client ID>)/g, this.githubConfig.clientId)
         
-        // GitHub Client Secret patterns
+        // GitHub Client Secret patterns - replace with real values
         .replace(/(\$\{GITHUB_CLIENT_SECRET\}|\$\{AUTH_GITHUB_CLIENT_SECRET\}|<GITHUB_CLIENT_SECRET>|<GITHUB_APP_CLIENT_SECRET>|<GitHub client secret>|<Github Client Secret>)/g, this.githubConfig.clientSecret)
         
-        // GitHub Organization patterns
-        .replace(/(<GitHub organization>|<GITHUB_ORGANIZATION>|<Github Organization>|TheCognizantFoundry)/g, this.githubConfig.organization || 'TheCognizantFoundry')
+        // GitHub Organization patterns - replace with real values
+        .replace(/(\$\{GITHUB_ORGANIZATION\}|<GitHub organization>|<GITHUB_ORGANIZATION>|<Github Organization>|TheCognizantFoundry)/g, this.githubConfig.organization || 'TheCognizantFoundry')
         
-        // Personal Access Token patterns - use actual credentials when available
-        .replace(/(\$\{GITHUB_TOKEN\}|<add your github personal access token>|<GITHUB_TOKEN>|<GitHub Token>|<Github Token>|<your github token>)/g, 
+        // Personal Access Token patterns - use actual credentials when available (includes new ${GITHUB_PAT_TOKEN} syntax)
+        .replace(/(\$\{GITHUB_PAT_TOKEN\}|\$\{GITHUB_TOKEN\}|<add your github personal access token>|<GITHUB_TOKEN>|<GitHub Token>|<Github Token>|<your github token>)/g, 
           hasRealPAT ? this.githubConfig.personalAccessToken : '${GITHUB_TOKEN}')
         
-        // GitHub App ID patterns
-        .replace(/(<GITHUB_APP_APP_ID>|<GitHub App ID>|<Github App ID>|<github app id>)/g, 
-          this.githubConfig.githubApp?.appId || '${GITHUB_APP_APP_ID}')
+        // GitHub App ID patterns - replace with real values when available
+        .replace(/(\$\{GITHUB_APP_ID\}|<GITHUB_APP_APP_ID>|<GitHub App ID>|<Github App ID>|<github app id>)/g, 
+          this.githubConfig.githubApp?.appId || '${GITHUB_APP_ID}')
         
-        // GitHub App Private Key patterns
-        .replace(/(<GITHUB_APP_PRIVATE_KEY>|<GitHub App Private Key>|<Github App Private Key>|<github app private key>)/g, 
+        // GitHub App Private Key patterns - replace with real values when available  
+        .replace(/(\$\{GITHUB_APP_PRIVATE_KEY\}|<GITHUB_APP_PRIVATE_KEY>|<GitHub App Private Key>|<Github App Private Key>|<github app private key>)/g, 
           hasRealGitHubApp ? this.githubConfig.githubApp.privateKey : '${GITHUB_APP_PRIVATE_KEY}');
 
       this.logger.info(`🔍 Config content after replacements: ${configContent.substring(0, 200)}...`);
@@ -509,6 +632,16 @@ export class GitHubAuth {
           }
 
           this.logger.info(`🔍 Final YAML config to be merged: ${JSON.stringify(yamlConfig, null, 2)}`);
+
+          // Track value version (with actual values) for dual config mode
+          if (this.yamlMerger && typeof this.yamlMerger.addValueBlock === 'function') {
+            try {
+              this.yamlMerger.addValueBlock(yamlConfig, "GitHub Authentication Configuration (Values)");
+              this.logger.debug("🔄 Tracked GitHub value config block for dual mode");
+            } catch (error) {
+              this.logger.debug(`⚠️ Could not track GitHub value block: ${error.message}`);
+            }
+          }
 
           // Merge into existing app-config.yaml using the YAML merger
           const success = await this.yamlMerger.mergeIntoYamlFile(
@@ -1056,6 +1189,28 @@ const authProviders: AuthProvider[] = [
         githubAuthConfig.auth.providers.github.development.githubOrganization = this.githubConfig.organization;
       }
 
+      // Create template version with placeholders for dual config mode
+      let templateConfig = null;
+      if (this.yamlMerger && typeof this.yamlMerger.addTemplateBlock === 'function') {
+        templateConfig = {
+          auth: {
+            environment: 'development',
+            providers: {
+              github: {
+                development: {
+                  clientId: '${GITHUB_CLIENT_ID}',
+                  clientSecret: '${GITHUB_CLIENT_SECRET}',
+                }
+              }
+            }
+          }
+        };
+
+        if (this.githubConfig.organization) {
+          templateConfig.auth.providers.github.development.githubOrganization = this.githubConfig.organization;
+        }
+      }
+
       // Configure GitHub integrations - SMART LOGIC
       // Only create integration section if we actually have integration credentials
       if (this.githubConfig.githubApp && this.githubConfig.githubApp.appId) {
@@ -1093,6 +1248,58 @@ const authProviders: AuthProvider[] = [
         // OAuth-only setup - no integration section needed
         this.logger.info("🔧 OAuth-only authentication configured - no GitHub integration section needed");
         this.logger.info("ℹ️ This is suitable for basic GitHub OAuth authentication without repository access");
+      }
+
+      // Add integration section to template config if needed
+      if (templateConfig) {
+        if (this.githubConfig.githubApp && this.githubConfig.githubApp.appId) {
+          // GitHub App integration template
+          templateConfig.integrations = {
+            github: [
+              {
+                host: 'github.com',
+                apps: [
+                  {
+                    appId: '${GITHUB_APP_ID}',
+                    clientId: '${GITHUB_APP_CLIENT_ID}',
+                    clientSecret: '${GITHUB_APP_CLIENT_SECRET}',
+                    privateKey: '${GITHUB_APP_PRIVATE_KEY}'
+                  }
+                ]
+              }
+            ]
+          };
+        } else if (this.githubConfig.personalAccessToken && 
+                   this.githubConfig.personalAccessToken !== "YOUR_GITHUB_TOKEN" && 
+                   !this.githubConfig.requiresManualSetup) {
+          // Personal Access Token integration template
+          templateConfig.integrations = {
+            github: [
+              {
+                host: 'github.com',
+                token: '${GITHUB_TOKEN}'
+              }
+            ]
+          };
+        }
+
+        // Track template version for dual config mode
+        try {
+          this.yamlMerger.addTemplateBlock(templateConfig, "GitHub Authentication Configuration (Template)");
+          this.logger.debug("🔄 Tracked GitHub template config for dual mode");
+        } catch (error) {
+          this.logger.debug(`⚠️ Could not track GitHub template config: ${error.message}`);
+        }
+      }
+
+      // Track value version for dual config mode (before merge)
+      if (this.yamlMerger && typeof this.yamlMerger.addValueBlock === 'function') {
+        try {
+          this.yamlMerger.addValueBlock(githubAuthConfig, "GitHub Authentication Configuration (Values)");
+          this.logger.debug("🔄 Tracked GitHub value config for dual mode");
+        } catch (error) {
+          this.logger.debug(`⚠️ Could not track GitHub value config: ${error.message}`);
+        }
       }
 
       // Merge the GitHub configuration into the existing app-config.yaml

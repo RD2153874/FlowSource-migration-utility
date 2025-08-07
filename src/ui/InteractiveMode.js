@@ -27,7 +27,19 @@ export class InteractiveMode {
       if (config.phase === 2) {
         await this.collectDatabaseConfig(config);
         await this.collectAuthConfig(config);
-        await this.collectGitHubAuthConfig(config);
+        
+        // Select authentication provider
+        const selectedProvider = await this.selectAuthProvider();
+        config.selectedAuthProvider = selectedProvider;
+        
+        // Configure the selected provider
+        if (selectedProvider === 'github') {
+          await this.collectGitHubAuthConfig(config);
+        }
+        // Future providers can be added here
+        // else if (selectedProvider === 'aws_alb') {
+        //   await this.collectAWSALBConfig(config);
+        // }
       }
 
       // Confirm migration settings
@@ -337,6 +349,62 @@ export class InteractiveMode {
   }
 
 
+  // Authentication Provider Selection
+  async selectAuthProvider() {
+    console.log("\n" + chalk.cyan("🔐 Phase 2: Authentication Configuration"));
+    console.log(chalk.cyan("Select your authentication provider:"));
+
+    const providerQuestion = await inquirer.prompt([
+      {
+        type: "list",
+        name: "provider",
+        message: "Choose an authentication provider:",
+        choices: [
+          {
+            name: chalk.green("✅ GitHub - OAuth & Integration"),
+            value: "github",
+            short: "GitHub"
+          },
+          new inquirer.Separator(),
+          {
+            name: chalk.gray("AWS ALB [Coming Soon]"),
+            value: "aws_alb",
+            disabled: chalk.yellow("Coming Soon")
+          },
+          {
+            name: chalk.gray("Azure Auth [Coming Soon]"),
+            value: "azure_auth", 
+            disabled: chalk.yellow("Coming Soon")
+          },
+          {
+            name: chalk.gray("Cognito [Coming Soon]"),
+            value: "cognito",
+            disabled: chalk.yellow("Coming Soon")
+          },
+          {
+            name: chalk.gray("GCP IAP [Coming Soon]"),
+            value: "gcp_iap",
+            disabled: chalk.yellow("Coming Soon")
+          },
+          {
+            name: chalk.gray("KeyCloak Auth [Coming Soon]"),
+            value: "keycloak_auth",
+            disabled: chalk.yellow("Coming Soon")
+          },
+          {
+            name: chalk.gray("OAuth2 Proxy [Coming Soon]"),
+            value: "oauth2_proxy",
+            disabled: chalk.yellow("Coming Soon")
+          }
+        ],
+        default: 0, // GitHub is pre-selected
+        pageSize: 10
+      }
+    ]);
+
+    return providerQuestion.provider;
+  }
+
   // collectGitHubAuthConfig: Method to collect Github Auth config
 
   async collectGitHubAuthConfig(config) {
@@ -344,7 +412,6 @@ export class InteractiveMode {
       return;
     }
 
-    console.log("\n" + chalk.cyan("🔐 Phase 2: Authentication Configuration"));
     console.log(chalk.gray("Debug: process.stdin.isTTY =", process.stdin.isTTY));
     console.log(chalk.gray("Debug: process.platform =", process.platform));
 
