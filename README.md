@@ -131,7 +131,44 @@ flowsource-migration-utility/
 └── README.md                       # This file
 ```
 
-## 🔧 Configuration
+## � Dependencies
+
+The FlowSource Migration Utility leverages several carefully selected packages to provide a robust and user-friendly migration experience:
+
+### Core Dependencies
+
+| Package | Purpose | Used In | Why We Use It |
+|---------|---------|---------|---------------|
+| **boxen** | Terminal output formatting | `index.js`, `CLIHelp.js` | Creates beautiful boxed terminal messages for help display and status information |
+| **chalk** | Terminal color formatting | 7+ files (FlowSourceAgent, InteractiveMode, Logger, etc.) | Provides colored and styled terminal output for better user experience |
+| **commander** | CLI argument parsing | `index.js` | Handles command-line arguments and options parsing professionally |
+| **figlet** | ASCII art generation | `index.js` | Creates the stylized FlowSource banner for brand identity |
+| **fs-extra** | Enhanced file operations | 14+ files across codebase | Essential for all file system operations with additional utilities beyond Node.js built-in `fs` |
+| **glob** | File pattern matching | `FileManager.js` | Enables powerful file search and pattern matching for migration tasks |
+| **inquirer** | Interactive CLI prompts | `InteractiveMode.js` | Provides the interactive question-answer interface for user configuration |
+| **js-yaml** | YAML parsing and manipulation | `YamlConfigMerger.js` | Handles YAML configuration file parsing and merging operations |
+| **markdown-it** | Markdown processing | `DocumentationParser.js` | Parses FlowSource documentation markdown files for automated migration guidance |
+| **ora** | Loading spinners | `FlowSourceAgent.js` | Displays animated progress indicators during long-running operations |
+| **winston** | Professional logging | `Logger.js` | Provides structured logging with multiple levels and file output |
+| **yaml** | YAML file operations | `ConfigManager.js` | Handles YAML file reading, writing, and configuration management |
+
+### Package Usage Details
+
+**Most Critical Dependencies:**
+- **fs-extra**: Used in 14+ files, handles all file operations including copying, moving, and directory management
+- **chalk**: Used in 7+ files, essential for the colorful and user-friendly terminal interface
+- **inquirer**: Powers the entire interactive mode experience with professional CLI prompts
+
+**User Experience Enhancers:**
+- **boxen + chalk + figlet**: Create the polished terminal interface that makes the utility professional and easy to use
+- **ora**: Provides visual feedback during long operations like file copying and npm installations
+
+**Technical Core:**
+- **js-yaml + yaml**: Handle all YAML configuration file operations, crucial for Backstage/FlowSource config management
+- **markdown-it**: Processes documentation files to automatically extract setup instructions
+- **glob**: Enables powerful file searching and pattern matching for migration tasks
+
+## �🔧 Configuration
 
 ### Source Package Structure
 
