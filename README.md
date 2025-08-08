@@ -1,6 +1,8 @@
 # FlowSource Migration Utility
 
-🚀 Intelligent utility tool that automates the conversion1. **📦 Dependencies Download**: npm downloads all required packages (chalk, inquirer, etc.)
+🚀 Intelligent utility tool that automates the conversion
+
+1. **📦 Dependencies Download**: npm downloads all required packages (chalk, inquirer, etc.)
 2. **⚡ Auto-Setup Trigger**: npm automatically runs our setup script after installation
 3. **📁 Environment Setup**: Creates logs directory and .env file from template
 4. **🔧 Platform Configuration**: Makes scripts executable on Unix-like systems
