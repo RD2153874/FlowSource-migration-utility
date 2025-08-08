@@ -1,40 +1,6 @@
 # FlowSource Migration Utility
 
-🚀 Intelligent utility tool that automates the conversion
-
-1. **📦 Dependencies Download**: npm downloads all required packages (chalk, inquirer, etc.)
-2. **⚡ Auto-Setup Trigger**: npm automatically runs our setup script after installation
-3. **📁 Environment Setup**: Creates logs directory and .env file from template
-4. **🔧 Platform Configuration**: Makes scripts executable on Unix-like systems
-5. **🎉 Ready to Use**: You're immediately ready to start migrations!
-
-**💡 This means your team members only need one command: `npm install` - everything else is automatic!**
-
-### 📋 **Before You Start Migration**
-
-After running `npm install`, your environment is automatically configured and ready. The setup process ensures:
-
-- ✅ **Dependencies Installed**: All required packages availableapplications into FlowSource applications using official documentation and configuration files.
-
-### 🔧 Configuration
-
-### Enhanced Documentation Files
-
-The utility includes an enhanced `DOCS/` folder containing updated FlowSource documentation files that provide:
-- **Structured Parsing**: Formatted for automated parsing by `DocumentationParser.js`
-- **Enhanced Instructions**: More detailed setup steps and configuration examples
-- **Phase 2 Support**: Complete authentication and database setup guidance
-- **Validation Patterns**: Specific formats that enable automated configuration validation
-
-**DOCS Folder Contents:**
-- `DOCS/Readme.md` - Enhanced main setup guide with structured authentication detection
-- `DOCS/UI-Changes.md` - Enhanced UI customization patterns and validation logic
-- `DOCS/Auth.md` - Complete authentication configuration with parsing-friendly format
-- `DOCS/GithubAuth.md` - Detailed GitHub OAuth setup with automated configuration support
-
-### Source Package Structure Overview
-
-The FlowSource Migration Utility is a Node.js-based automation tool that transforms standard Backstage installations into fully-featured FlowSource platforms. It follows the official FlowSource documentation to ensure accurate and complete migrations.
+🚀 Intelligent Node.js-based utility. An automation tool that transforms standard Backstage installations into fully-featured FlowSource platforms. It follows the official FlowSource documentation to ensure accurate and complete migrations.
 
 ## ✨ Features
 
@@ -54,7 +20,145 @@ The FlowSource Migration Utility is a Node.js-based automation tool that transfo
 | **yarn** | 1.22.22, 4.7.0 | `npm install -g yarn` |
 | **Git** | Latest | [Download](https://git-scm.com/) |
 
+
+## �🔧 Source Package Configuration
+
+### Source Package Structure
+
+The utility expects the FlowSource package to have this structure:
+
+```
+Flowsource_Package_1_0_0/
+├── FlowSourceInstaller/
+│   └── FlowsourceSetupDoc/
+│       ├── Readme.md               # Main setup guide
+│       ├── UI-Changes.md           # UI customization guide
+│       ├── Auth.md                 # Authentication setup guide
+│       └── GithubAuth.md           # GitHub OAuth provider guide
+├── configuration/                  # Configuration files
+│   ├── app-config.yaml
+│   ├── package.json
+│   ├── Dockerfile
+│   └── ...
+└── packages-core/                  # Core application code
+    ├── app/                        # Frontend
+    └── backend/                    # Backend
+```
+
+## 📋 Before You Start Migration
+
+### ⚠️ Important: Documentation File Requirements
+
+**CRITICAL SETUP STEP**: Before running the migration utility, you **MUST** replace the authentication documentation files in your FlowSource package with the updated versions provided with this utility:
+
+#### Required File Replacements:
+
+1. **Replace `Readme.md`**:
+   - **Source**: `DOCS/Readme.md` (from this utility)
+   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/Readme.md`
+   - **Why**: Contains structured setup instructions that the utility parses for authentication detection and migration flow control
+
+2. **Replace `UI-Changes.md`**:
+   - **Source**: `DOCS/UI-Changes.md` (from this utility)
+   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/UI-Changes.md`
+   - **Why**: Contains enhanced UI transformation patterns and validation logic that the utility uses for Phase 1 compliance checking
+
+3. **Replace `Auth.md`**:
+   - **Source**: `DOCS/Auth.md` (from this utility)
+   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/Auth.md`
+   - **Why**: Contains updated authentication logic and configuration patterns that the utility can parse and implement
+
+4. **Replace `GithubAuth.md`**:
+   - **Source**: `DOCS/GithubAuth.md` (from this utility)  
+   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/GithubAuth.md`
+   - **Why**: Contains structured GitHub OAuth setup instructions with specific formatting that enables automated configuration
+
+
+
+#### How to Replace:
+
+```bash
+# Navigate to your FlowSource package directory
+cd "C:\Path\To\Your\Flowsource_Package_1_0_0\FlowSourceInstaller\FlowsourceSetupDoc"
+
+# Backup original files (optional)
+copy Readme.md Readme.md.backup
+copy UI-Changes.md UI-Changes.md.backup
+copy Auth.md Auth.md.backup
+copy GithubAuth.md GithubAuth.md.backup
+
+# Copy updated files from utility DOCS folder
+copy "C:\Path\To\flowsource-migration-utility\DOCS\Readme.md" Readme.md
+copy "C:\Path\To\flowsource-migration-utility\DOCS\UI-Changes.md" UI-Changes.md
+copy "C:\Path\To\flowsource-migration-utility\DOCS\Auth.md" Auth.md
+copy "C:\Path\To\flowsource-migration-utility\DOCS\GithubAuth.md" GithubAuth.md
+```
+
+#### Why This is Required:
+
+- **Enhanced Parsing**: The utility's `DocumentationParser.js` requires specific formatting and structure to extract configuration details
+- **Complex Logic Support**: Updated files contain authentication patterns and YAML configurations that the utility can automatically implement
+- **Phase 2 Authentication**: Essential for proper GitHub OAuth, backend secrets, and database configuration in Phase 2 migrations
+- **Automated Setup**: Enables the utility to generate both template and local configuration files with correct authentication blocks
+
+**⚠️ Migration will fail** if you skip this step, as the utility cannot parse the authentication requirements from the original documentation format.
+
+
 ## 🚀 Quick Start
+
+## 🗂️ Project Structure
+
+```
+flowsource-migration-utility/
+├── src/
+│   ├── index.js                    # Main entry point
+│   ├── core/
+│   │   ├── FlowSourceAgent.js      # Main migration logic
+│   │   ├── BackstageGenerator.js   # Backstage skeleton generation
+│   │   ├── FlowSourceTransformer.js # UI customization engine
+│   │   ├── AuthConfigure.js        # Authentication configuration
+│   │   ├── GitHubAuth.js           # GitHub OAuth provider setup
+│   │   └── ValidationEngine.js     # Migration validation
+│   ├── ui/
+│   │   └── InteractiveMode.js      # User interface
+│   ├── utils/
+│   │   ├── Logger.js               # Centralized logging
+│   │   ├── FileManager.js          # File operations
+│   │   ├── DocumentationParser.js  # Markdown parsing
+│   │   ├── ConfigManager.js        # Configuration handling
+│   │   ├── ConfigValidator.js      # Prerequisites validation
+│   │   ├── YamlConfigMerger.js     # YAML configuration merging
+│   │   └── CLIHelp.js              # Command line help
+│   └── tests/
+│       └── utility.test.js           # Test suite
+├── DOCS/                           # Updated FlowSource documentation
+│   ├── Auth.md                     # Enhanced authentication setup guide
+│   ├── GithubAuth.md               # Enhanced GitHub OAuth provider guide
+│   ├── Readme.md                   # Enhanced main setup guide
+│   └── UI-Changes.md               # Enhanced UI customization guide
+├── .github/                        # GitHub repository configuration
+│   └── pull_request_template.md    # PR template for contributors
+├── logs/                           # Application logs
+├── .env.example                    # Environment variables template
+├── .gitignore                      # Git ignore patterns
+├── setup.js                       # Setup and initialization
+├── package.json                    # Dependencies and scripts
+└── README.md                       # This file
+```
+
+### Enhanced Documentation Files
+
+The utility includes an enhanced `DOCS/` folder containing updated FlowSource documentation files that provide:
+- **Structured Parsing**: Formatted for automated parsing by `DocumentationParser.js`
+- **Enhanced Instructions**: More detailed setup steps and configuration examples
+- **Phase 2 Support**: Complete authentication and database setup guidance
+- **Validation Patterns**: Specific formats that enable automated configuration validation
+
+**DOCS Folder Contents:**
+- `DOCS/Readme.md` - Enhanced main setup guide with structured authentication detection
+- `DOCS/UI-Changes.md` - Enhanced UI customization patterns and validation logic
+- `DOCS/Auth.md` - Complete authentication configuration with parsing-friendly format
+- `DOCS/GithubAuth.md` - Detailed GitHub OAuth setup with automated configuration support
 
 ### Installation & Setup
 
@@ -207,45 +311,6 @@ npm start
 - 📊 Monitoring and observability
 - 🤖 AI-powered features
 
-## 🗂️ Project Structure
-
-```
-flowsource-migration-utility/
-├── src/
-│   ├── index.js                    # Main entry point
-│   ├── core/
-│   │   ├── FlowSourceAgent.js      # Main migration logic
-│   │   ├── BackstageGenerator.js   # Backstage skeleton generation
-│   │   ├── FlowSourceTransformer.js # UI customization engine
-│   │   ├── AuthConfigure.js        # Authentication configuration
-│   │   ├── GitHubAuth.js           # GitHub OAuth provider setup
-│   │   └── ValidationEngine.js     # Migration validation
-│   ├── ui/
-│   │   └── InteractiveMode.js      # User interface
-│   ├── utils/
-│   │   ├── Logger.js               # Centralized logging
-│   │   ├── FileManager.js          # File operations
-│   │   ├── DocumentationParser.js  # Markdown parsing
-│   │   ├── ConfigManager.js        # Configuration handling
-│   │   ├── ConfigValidator.js      # Prerequisites validation
-│   │   ├── YamlConfigMerger.js     # YAML configuration merging
-│   │   └── CLIHelp.js              # Command line help
-│   └── tests/
-│       └── utility.test.js           # Test suite
-├── DOCS/                           # Updated FlowSource documentation
-│   ├── Auth.md                     # Enhanced authentication setup guide
-│   ├── GithubAuth.md               # Enhanced GitHub OAuth provider guide
-│   ├── Readme.md                   # Enhanced main setup guide
-│   └── UI-Changes.md               # Enhanced UI customization guide
-├── .github/                        # GitHub repository configuration
-│   └── pull_request_template.md    # PR template for contributors
-├── logs/                           # Application logs
-├── .env.example                    # Environment variables template
-├── .gitignore                      # Git ignore patterns
-├── setup.js                       # Setup and initialization
-├── package.json                    # Dependencies and scripts
-└── README.md                       # This file
-```
 
 ## � Dependencies
 
@@ -284,85 +349,6 @@ The FlowSource Migration Utility leverages several carefully selected packages t
 - **markdown-it**: Processes documentation files to automatically extract setup instructions
 - **glob**: Enables powerful file searching and pattern matching for migration tasks
 
-## �🔧 Configuration
-
-### Source Package Structure
-
-The utility expects the FlowSource package to have this structure:
-
-```
-Flowsource_Package_1_0_0/
-├── FlowSourceInstaller/
-│   └── FlowsourceSetupDoc/
-│       ├── Readme.md               # Main setup guide
-│       ├── UI-Changes.md           # UI customization guide
-│       ├── Auth.md                 # Authentication setup guide
-│       └── GithubAuth.md           # GitHub OAuth provider guide
-├── configuration/                  # Configuration files
-│   ├── app-config.yaml
-│   ├── package.json
-│   ├── Dockerfile
-│   └── ...
-└── packages-core/                  # Core application code
-    ├── app/                        # Frontend
-    └── backend/                    # Backend
-```
-
-### ⚠️ Important: Documentation File Requirements
-
-**CRITICAL SETUP STEP**: Before running the migration utility, you **MUST** replace the authentication documentation files in your FlowSource package with the updated versions provided with this utility:
-
-#### Required File Replacements:
-
-1. **Replace `Readme.md`**:
-   - **Source**: `DOCS/Readme.md` (from this utility)
-   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/Readme.md`
-   - **Why**: Contains structured setup instructions that the utility parses for authentication detection and migration flow control
-
-2. **Replace `UI-Changes.md`**:
-   - **Source**: `DOCS/UI-Changes.md` (from this utility)
-   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/UI-Changes.md`
-   - **Why**: Contains enhanced UI transformation patterns and validation logic that the utility uses for Phase 1 compliance checking
-
-3. **Replace `Auth.md`**:
-   - **Source**: `DOCS/Auth.md` (from this utility)
-   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/Auth.md`
-   - **Why**: Contains updated authentication logic and configuration patterns that the utility can parse and implement
-
-4. **Replace `GithubAuth.md`**:
-   - **Source**: `DOCS/GithubAuth.md` (from this utility)  
-   - **Destination**: `Flowsource_Package_1_0_0/FlowSourceInstaller/FlowsourceSetupDoc/GithubAuth.md`
-   - **Why**: Contains structured GitHub OAuth setup instructions with specific formatting that enables automated configuration
-
-
-
-#### How to Replace:
-
-```bash
-# Navigate to your FlowSource package directory
-cd "C:\Path\To\Your\Flowsource_Package_1_0_0\FlowSourceInstaller\FlowsourceSetupDoc"
-
-# Backup original files (optional)
-copy Readme.md Readme.md.backup
-copy UI-Changes.md UI-Changes.md.backup
-copy Auth.md Auth.md.backup
-copy GithubAuth.md GithubAuth.md.backup
-
-# Copy updated files from utility DOCS folder
-copy "C:\Path\To\flowsource-migration-utility\DOCS\Readme.md" Readme.md
-copy "C:\Path\To\flowsource-migration-utility\DOCS\UI-Changes.md" UI-Changes.md
-copy "C:\Path\To\flowsource-migration-utility\DOCS\Auth.md" Auth.md
-copy "C:\Path\To\flowsource-migration-utility\DOCS\GithubAuth.md" GithubAuth.md
-```
-
-#### Why This is Required:
-
-- **Enhanced Parsing**: The utility's `DocumentationParser.js` requires specific formatting and structure to extract configuration details
-- **Complex Logic Support**: Updated files contain authentication patterns and YAML configurations that the utility can automatically implement
-- **Phase 2 Authentication**: Essential for proper GitHub OAuth, backend secrets, and database configuration in Phase 2 migrations
-- **Automated Setup**: Enables the utility to generate both template and local configuration files with correct authentication blocks
-
-**⚠️ Migration will fail** if you skip this step, as the utility cannot parse the authentication requirements from the original documentation format.
 
 ### Environment Variables
 
