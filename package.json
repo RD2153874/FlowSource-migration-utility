@@ -5,6 +5,8 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
+    "setup": "node setup.js",
+    "postinstall": "node setup.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test src/tests/*.test.js",
