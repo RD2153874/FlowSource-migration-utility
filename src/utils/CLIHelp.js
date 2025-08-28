@@ -77,8 +77,10 @@ ${chalk.yellow.bold("PREREQUISITES:")}
 ${chalk.yellow.bold("SOURCE STRUCTURE:")}
   The source package should contain:
   📁 FlowSourceInstaller/FlowsourceSetupDoc/
-    ├── Readme.md
-    └── UI-Changes.md
+    ├── Auth.md                     # Enhanced authentication setup guide
+│   ├── GithubAuth.md               # Enhanced GitHub OAuth provider guide
+│   ├── Readme.md                   # Enhanced main setup guide
+│   └── UI-Changes.md               # Enhanced UI changes guide
   📁 configuration/
     ├── app-config.yaml
     ├── package.json
@@ -117,7 +119,7 @@ ${chalk.yellow.bold("3. FOLLOW PROMPTS:")}
    • Enter source FlowSource package path
    • Choose destination for new application
    • Provide application name
-   • Select migration phase (recommend Phase 1)
+   • Select migration phase (recommend Phase 2)
 
 ${chalk.yellow.bold("4. VERIFY:")}
    • Check migration logs for any issues
@@ -181,9 +183,6 @@ ${chalk.yellow.bold("DEBUG COMMANDS:")}
    ${chalk.cyan("# Check prerequisites")}
    ${chalk.gray("node src/index.js --verbose")}
 
-   ${chalk.cyan("# Preview changes without executing")}
-   ${chalk.gray("node src/index.js --dry-run")}
-
    ${chalk.cyan("# Check detailed logs")}
    ${chalk.gray("tail -f logs/combined.log")}
 
@@ -194,7 +193,6 @@ ${chalk.yellow.bold("GET HELP:")}
    • Check README.md for detailed documentation
    • Review logs in logs/ directory
    • Run with --verbose for detailed output
-   • Use --dry-run to preview changes safely
 `;
 
     console.log(troubleshootingText);

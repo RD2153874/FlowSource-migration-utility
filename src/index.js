@@ -59,7 +59,7 @@ program
   .option("-i, --install", "Auto-install dependencies")
   .option("--mode <mode>", "Operation mode: interactive|cli", "interactive")
   .option("--phase <phase>", "Migration phase: 1|2|3", "1")
-  .option("--dry-run", "Preview changes without executing")
+  .option("--dry-run", "Preview changes without executing[Coming Soon]")
   .option("--verbose", "Enable verbose logging")
   .option("--config <file>", "Custom configuration file")
   .option("--help-quick", "Show quick start guide")
