@@ -243,8 +243,8 @@ node src/index.js
 ```bash
 # Direct migration with parameters (Phase 1 only)
 npm run migrate -- \
-  --source "C:\Agent\Flowsource_Package_1_0_0" \
-  --destination "C:\my-flowsource-app" \
+  --source "C:\path-to\Flowsource_Package_1_0_0" \
+  --destination "C:\path-to\my-flowsource-app" \
   --name "my-app" \
   --install \
   --phase 1
@@ -472,6 +472,14 @@ tail -f logs/combined.log
 ### For FlowSource Development Teams
 
 When sharing this utility with fellow FlowSource developers:
+
+#### **📖 Complete Setup Guide**
+For detailed workspace setup, prerequisites, and step-by-step instructions, refer to the [UserManual.md](UserManual.md) which provides comprehensive guidance for:
+- System prerequisites and verification
+- Database setup (PostgreSQL/SQLite)
+- GitHub OAuth configuration
+- FlowSource package preparation
+- Environment setup and organization
 
 #### **Recommended Team Onboarding (Super Simple):**
 ```bash
