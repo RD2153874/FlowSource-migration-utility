@@ -6,7 +6,13 @@
 
 ## 🎯 Quick Overview
 
-The FlowSource Migration Utility transforms standard Backstage applications into fully-featured FlowSource platform with enhanced authentication, database integration, and enterprise-grade features. This manual provides step-by-step instructions to ensure a successful migration.
+The FlowSource Migration Utility transforms standard Backstage applications into fully-featured FlowSource platform with enhanced authentication, database integration, template integration, and enterprise-grade features. This manual provides step-by-step instructions to ensure a successful migration through all three phases:
+
+- **Phase 1**: Basic FlowSource UI and theming
+- **Phase 2**: Authentication, database integration, and permissions  
+- **Phase 3**: Template / Plugin integration and development platform capabilities
+
+The utility supports intelligent template integration with PDLC templates, automated catalog configuration, and plugin infrastructure preparation for a complete development platform experience.
 
 ## 📋 Table of Contents
 
@@ -17,6 +23,9 @@ The FlowSource Migration Utility transforms standard Backstage applications into
 5. [Environment Setup](#-environment-setup)
 6. [Installation Guide](#-installation-guide)
 7. [Migration Process](#-migration-process)
+   - [Phase 1: Basic FlowSource Setup](#phase-1-basic-flowsource-setup)
+   - [Phase 2: Authentication & Database Integration](#phase-2-authentication--database-integration)
+   - [Phase 3: Templates & Plugins Integration](#phase-3-templates--plugins-integration-)
 8. [Post-Migration Configuration](#-post-migration-configuration)
 9. [Troubleshooting](#-troubleshooting)
 10. [Support](#-support)
@@ -201,7 +210,8 @@ Flowsource_Package_1_0_0/
 │       ├── Readme.md                    # Main setup guide
 │       ├── Auth.md                      # Authentication setup
 │       ├── GithubAuth.md               # GitHub OAuth guide
-│       └── UI-Changes.md               # UI customization
+│       ├── UI-Changes.md               # UI customization
+│       └── PDLC-template.md            # Template integration guide (Phase 3)
 ├── configuration/                       # Base configuration files
 │   ├── app-config.yaml
 │   ├── package.json
@@ -210,6 +220,16 @@ Flowsource_Package_1_0_0/
 ├── packages-core/                       # Core FlowSource code
 │   ├── app/                            # Frontend application
 │   └── backend/                        # Backend services
+├── Flowsource-templates/               # Templates for Phase 3 integration
+│   ├── PDLC-Backend/                   # Backend development template
+│   │   ├── template.yaml               # Template definition
+│   │   ├── skeleton/                   # Template files
+│   │   └── docs/                       # Template documentation
+│   ├── PDLC-Frontend/                  # Frontend development template
+│   │   ├── template.yaml               # Template definition
+│   │   ├── skeleton/                   # Template files
+│   │   └── docs/                       # Template documentation
+│   └── ...                             # Additional templates
 └── ...
 ```
 
@@ -217,6 +237,7 @@ Flowsource_Package_1_0_0/
 
 Before starting migration, verify your source package:
 
+**Phase 1 & 2 Requirements:**
 ```powershell
 # Navigate to your FlowSource package
 cd "C:\path\to\Flowsource_Package_1_0_0"
@@ -231,6 +252,21 @@ dir FlowSourceInstaller\FlowsourceSetupDoc\*.md
 dir configuration\app-config.yaml
 dir packages-core\app
 dir packages-core\backend
+```
+
+**Additional Phase 3 Requirements:**
+```powershell
+# Check Phase 3 template directories exist
+dir Flowsource-templates
+dir Flowsource-templates\PDLC-Backend
+dir Flowsource-templates\PDLC-Frontend
+
+# Verify Phase 3 documentation exists
+dir FlowSourceInstaller\FlowsourceSetupDoc\PDLC-template.md
+
+# Verify template.yaml files exist
+dir Flowsource-templates\PDLC-Backend\template.yaml
+dir Flowsource-templates\PDLC-Frontend\template.yaml
 ```
 
 ### Package Download
@@ -334,7 +370,7 @@ Options:
   -n, --name <name>         Application name
   -i, --install             Auto-install dependencies
   --mode <mode>             Operation mode: interactive|cli (default: "interactive")
-  --phase <phase>           Migration phase: 1|2|3 (default: "1")
+  --phase <phase>           Migration phase: 1|2|3 (default: "3")
   --dry-run                 Preview changes without executing
   --verbose                 Enable verbose logging
   --config <file>           Custom configuration file
@@ -474,6 +510,224 @@ During migration, you'll see:
 🤖 Welcome to FlowSource Migration Utility - Interactive Mode
 ```
 
+### Phase 3: Templates & Plugins Integration ✅
+
+Phase 3 transforms your FlowSource application into a comprehensive development platform with template integration and plugin support infrastructure.
+
+#### Prerequisites Check
+
+Before running Phase 3, ensure:
+
+- ✅ **Phase 2 completed successfully** (Authentication & Database configured)
+- ✅ **FlowSource package contains Flowsource-templates/** directory
+- ✅ **PDLC-template.md** exists in FlowSourceInstaller/FlowsourceSetupDoc/
+- ✅ **Template directories** (PDLC-Backend, PDLC-Frontend) contain template.yaml files
+
+#### Phase 3 Features Overview
+
+**🚀 What Phase 3 Provides:**
+- **📄 Template Integration**: Intelligent PDLC template integration with automated catalog configuration
+- **🔍 Dynamic Discovery**: Automatic template scanning and discovery from FlowSource package
+- **📖 Documentation-Driven**: Parses PDLC-template.md for automated integration instructions
+- **🎯 User Selection**: Interactive template selection with descriptions and validation
+- **⚙️ Smart Configuration**: Automatic catalog entry creation in both app-config files
+- **🔌 Plugin Infrastructure**: Ready for plugin integration (coming soon)
+
+#### Interactive Mode (Only Supported Mode)
+
+```powershell
+# Start Phase 3 migration
+npm start
+```
+
+**📋 Detailed Interactive Process: Phase 3 Template Integration**
+
+**1: Basic Configuration**
+- **Source Path**: Enter path to your `Flowsource_Package_1_0_0` directory
+- **Destination Path**: Path to your existing FlowSource app (from Phase 1/2)
+- **Application Name**: Confirm your application name
+
+**2: Migration Phase Selection**
+- **Choose Phase**: Select `3` for Templates & Plugins Integration
+- **Automatic Prerequisites**: Phase 3 automatically validates Phase 2 completion
+- **Auto-Execution**: If Phase 2 not completed, Phase 3 will execute Phase 2 first
+
+**3: Auto Install & Verbose Logging**
+- **Automatic dependency install**: Select `N` (recommended - install manually post-migration)
+- **Verbose Logging**: Choose `Y` for detailed progress tracking
+
+**4: Phase 2 Prerequisites Collection** (If Phase 2 not completed)
+- Phase 3 will automatically collect Phase 2 configuration:
+  - Database configuration (PostgreSQL/SQLite)
+  - Authentication provider selection
+  - GitHub OAuth configuration
+  - Backend authentication secrets
+
+**5: Phase 3 Integration Type Selection**
+- **Integration Choice**: Select what to integrate:
+  
+  ```
+  🔧 What would you like to integrate?
+  ❯ 📄 Templates only - Add FlowSource templates
+    🔌 Plugins only - Add FlowSource plugins (Coming Soon)
+    🎯 Both Templates and Plugins (Available when plugins ready)
+  ```
+
+**6: Template Selection** (If Templates chosen)
+- **Available Templates**: Utility automatically discovers available templates
+- **Template List**: Choose from discovered templates:
+  
+  ```
+  📄 Select templates to integrate:
+  ❯ ◯ PDLC-Backend - Backend development template with best practices
+    ◯ PDLC-Frontend - Frontend development template with best practices
+    ◯ [Additional templates if available]
+  ```
+  
+- **Multi-Selection**: Use space bar to select multiple templates
+- **Validation**: Must select at least one template
+
+**7: Configuration Review & Confirmation**
+- **Phase 3 Summary**: Review selected integration type and templates
+- **Phase 2 Configuration**: Review authentication and database settings (if collected)
+- **Final Confirmation**: Confirm to start Phase 3 migration
+
+#### Phase 3 Migration Progress
+
+During Phase 3 migration, you'll see detailed progress:
+
+```
+🚀 Starting Phase 3: Templates & Plugins Integration
+[14/19] 🔍 Validating Phase 3 prerequisites...
+✅ Phase 2 already completed, proceeding with Phase 3
+✅ Flowsource-templates directory found
+✅ PDLC-template.md found and accessible
+
+[15/19] 📋 Processing integration selections...
+🎯 Integration type: templates
+📄 Selected templates: PDLC-Backend, PDLC-Frontend
+
+[16/19] 📄 Integrating templates...
+🚀 Starting intelligent template integration...
+📖 Parsing PDLC template documentation...
+✅ Template instructions parsed successfully
+📄 Integrating template: PDLC-Backend
+🔧 Processing PDLC-Backend integration...
+📁 Created templates directory
+📄 Copied PDLC-Backend from Flowsource-templates/PDLC-Backend to templates/PDLC-Backend
+✅ Verified template.yaml exists for PDLC-Backend
+✅ PDLC-Backend integrated successfully
+📄 Integrating template: PDLC-Frontend
+🔧 Processing PDLC-Frontend integration...
+📄 Copied PDLC-Frontend from Flowsource-templates/PDLC-Frontend to templates/PDLC-Frontend
+✅ Verified template.yaml exists for PDLC-Frontend
+✅ PDLC-Frontend integrated successfully
+
+[17/19] ⚙️ Updating configuration files...
+⚙️ Updating app-config files with template catalog entries...
+✅ Updated app-config.yaml with template catalog entries
+✅ Updated app-config.local.yaml with template catalog entries
+🔄 Dual configuration maintained: template entries synchronized
+
+[18/19] 🔍 Validating integrations...
+🔍 Validating template integration...
+✅ All template integrations validated successfully
+
+[19/19] 🎁 Final validation and cleanup...
+✅ Phase 3 setup finalized
+```
+
+#### Template Integration Details
+
+**📄 What Happens During Template Integration:**
+
+1. **Documentation Parsing**: 
+   - Reads `PDLC-template.md` for integration instructions
+   - Extracts template-specific copy instructions
+   - Identifies source and target paths
+
+2. **Directory Creation**:
+   - Creates `templates/` directory in your application
+   - Ensures proper directory structure
+
+3. **File Operations**:
+   - Copies template files from `Flowsource-templates/PDLC-Backend/` to `templates/PDLC-Backend/`
+   - Copies template files from `Flowsource-templates/PDLC-Frontend/` to `templates/PDLC-Frontend/`
+   - Preserves template.yaml and all supporting files
+
+4. **Configuration Updates**:
+   - Updates `app-config.yaml` with catalog entries:
+     ```yaml
+     catalog:
+       locations:
+         - type: file
+           target: ../../templates/PDLC-Backend/template.yaml
+           rules:
+             - allow: [Template]
+         - type: file
+           target: ../../templates/PDLC-Frontend/template.yaml
+           rules:
+             - allow: [Template]
+     ```
+   - Maintains dual configuration by updating both config files
+
+5. **Validation**:
+   - Verifies template directories exist
+   - Validates template.yaml structure
+   - Confirms catalog configuration accuracy
+
+#### Plugin Integration (Coming Soon)
+
+**🔌 Plugin Infrastructure Ready:**
+- Plugin integration framework implemented
+- Interactive selection system prepared
+- Configuration management ready
+- Currently shows "Coming Soon" message
+
+**Future Plugin Capabilities:**
+- 50+ DevOps plugins
+- Infrastructure provisioning
+- Monitoring and observability
+- AI-powered features
+
+#### Phase 3 CLI Mode Limitation
+
+**❌ CLI Mode Not Supported for Phase 3:**
+Phase 3 requires complex user interactions that CLI mode cannot handle:
+- Template discovery and selection
+- Multi-choice integration options
+- Dynamic configuration based on user selections
+- Plugin selection interface (when available)
+
+**✅ Solution**: Always use Interactive Mode for Phase 3:
+```powershell
+npm start
+# Select Phase 3 in the interactive interface
+```
+
+#### Post-Phase 3 Application Structure
+
+After successful Phase 3 migration, your application will have:
+
+```
+my-flowsource-app/
+├── app-config.yaml              # Updated with template catalog entries
+├── app-config.local.yaml        # Updated with template catalog entries
+├── templates/                   # NEW: Template directory
+│   ├── PDLC-Backend/           # Backend development template
+│   │   ├── template.yaml       # Template definition
+│   │   ├── skeleton/           # Template files
+│   │   └── docs/               # Template documentation
+│   └── PDLC-Frontend/          # Frontend development template
+│       ├── template.yaml       # Template definition
+│       ├── skeleton/           # Template files
+│       └── docs/               # Template documentation
+├── packages/
+│   ├── app/                    # Frontend with authentication
+│   └── backend/                # Backend with auth & database
+└── ...
+```
+
 ---
 
 ## ⚙️ Post-Migration Configuration
@@ -503,16 +757,48 @@ During migration, you'll see:
    - **Frontend**: http://localhost:3000
    - **Backend API**: http://localhost:7007
 
+### Phase 3 Template Verification
+
+If you completed Phase 3, verify template integration:
+
+1. **Check Templates Directory**:
+   ```powershell
+   # Verify templates directory exists
+   dir templates
+   
+   # Check integrated templates
+   dir templates\PDLC-Backend
+   dir templates\PDLC-Frontend
+   
+   # Verify template.yaml files
+   dir templates\PDLC-Backend\template.yaml
+   dir templates\PDLC-Frontend\template.yaml
+   ```
+
+2. **Verify Catalog Configuration**:
+   ```powershell
+   # Check catalog entries in config files
+   findstr /C:"templates/" app-config.yaml
+   findstr /C:"templates/" app-config.local.yaml
+   ```
+
+3. **Access Templates in Backstage**:
+   - **Navigate to**: http://localhost:3000/create
+   - **Verify**: PDLC-Backend and PDLC-Frontend templates appear in the catalog
+   - **Test**: Try creating a new project using one of the templates
+
 ### Configuration Files
 
 Your generated application includes:
 
 | File | Purpose | Location |
 |------|---------|----------|
-| `app-config.yaml` | Main configuration | Project root |
-| `app-config.local.yaml` | Local development overrides | Project root |
+| `app-config.yaml` | Main configuration with template catalog entries | Project root |
+| `app-config.local.yaml` | Local development overrides with template catalog entries | Project root |
 | `packages/backend/src/plugins/auth.ts` | Authentication setup | Backend |
 | `packages/app/src/App.tsx` | Frontend app configuration | Frontend |
+| `templates/PDLC-Backend/template.yaml` | Backend template definition (Phase 3) | Templates |
+| `templates/PDLC-Frontend/template.yaml` | Frontend template definition (Phase 3) | Templates |
 
 ---
 
@@ -582,6 +868,76 @@ auth:
 - ✅ **Check terminal encoding** (use UTF-8)
 - ✅ **Restart PowerShell** as Administrator
 - ✅ **Verify all prerequisites** are met
+
+#### 6. Phase 3: Template Integration Failed
+
+**Problem**: Templates not found or integration fails
+
+**Solutions**:
+```powershell
+# Verify Phase 3 prerequisites
+dir "C:\path\to\Flowsource_Package_1_0_0\Flowsource-templates"
+dir "C:\path\to\Flowsource_Package_1_0_0\FlowSourceInstaller\FlowsourceSetupDoc\PDLC-template.md"
+
+# Check template directories exist
+dir "C:\path\to\Flowsource_Package_1_0_0\Flowsource-templates\PDLC-Backend"
+dir "C:\path\to\Flowsource_Package_1_0_0\Flowsource-templates\PDLC-Frontend"
+
+# Verify template.yaml files
+dir "C:\path\to\Flowsource_Package_1_0_0\Flowsource-templates\PDLC-Backend\template.yaml"
+dir "C:\path\to\Flowsource_Package_1_0_0\Flowsource-templates\PDLC-Frontend\template.yaml"
+```
+
+#### 7. Phase 3: Templates Not Appearing in Catalog
+
+**Problem**: Templates integrated but not visible in Backstage catalog
+
+**Solutions**:
+```powershell
+# Verify catalog configuration
+findstr /C:"templates/" app-config.yaml
+findstr /C:"templates/" app-config.local.yaml
+
+# Check templates directory in generated app
+dir "C:\FlowSource-Migration\generated-apps\my-flowsource-app\templates"
+
+# Verify template.yaml content
+type "C:\FlowSource-Migration\generated-apps\my-flowsource-app\templates\PDLC-Backend\template.yaml"
+```
+
+**Additional Checks**:
+- ✅ **Restart Application**: After template integration, restart with `yarn dev`
+- ✅ **Clear Browser Cache**: Templates may be cached
+- ✅ **Check Console Errors**: Open browser dev tools for error messages
+- ✅ **Verify File Permissions**: Ensure template files are readable
+
+#### 8. Phase 3: "Phase 2 Not Completed" Error
+
+**Problem**: Phase 3 detects Phase 2 is incomplete
+
+**Solutions**:
+- ✅ **Let Phase 3 Auto-Execute**: Phase 3 will automatically run Phase 2 if needed
+- ✅ **Run Phase 2 First**: Complete Phase 2 migration before attempting Phase 3
+- ✅ **Check Phase 2 Indicators**: Verify authentication files exist:
+  ```powershell
+  dir "packages\backend\src\plugins\auth.ts"
+  dir "app-config.local.yaml"
+  findstr /C:"auth:" app-config.yaml
+  ```
+
+#### 9. Phase 3: CLI Mode Error
+
+**Problem**: Attempting to run Phase 3 in CLI mode
+
+**Error Message**: 
+```
+Phase 3 requires interactive mode for template selection
+```
+
+**Solution**:
+- ✅ **Use Interactive Mode Only**: Phase 3 only supports interactive mode
+- ✅ **Command**: Always use `npm start` for Phase 3
+- ✅ **Reason**: Template selection requires complex user interaction
 
 ### Debug Mode
 
@@ -670,6 +1026,13 @@ Before starting your migration, verify all prerequisites:
 - [ ] Required directory structure verified
 - [ ] Full path to package documented
 
+### Phase 3 Additional Prerequisites (Templates & Plugins)
+- [ ] `Flowsource-templates/` directory exists in source package
+- [ ] `PDLC-template.md` exists in FlowSourceInstaller/FlowsourceSetupDoc/
+- [ ] PDLC-Backend template directory contains template.yaml
+- [ ] PDLC-Frontend template directory contains template.yaml
+- [ ] Phase 2 completed (or will be auto-executed by Phase 3)
+
 ### Environment Setup
 - [ ] Migration workspace created
 - [ ] FlowSource Migration Utility downloaded
@@ -682,7 +1045,7 @@ Before starting your migration, verify all prerequisites:
 
 With all prerequisites met, you can confidently run the FlowSource Migration Utility and transform your Backstage application into a powerful FlowSource platform.
 
-For the best experience, start with **Phase 1** to verify basic functionality, then proceed to **Phase 2** for full authentication and database integration.
+For the best experience, start with **Phase 1** to verify basic functionality, then proceed to **Phase 2** for full authentication and database integration, and finally **Phase 3** for complete template integration and development platform capabilities.
 
 ---
 

@@ -10,6 +10,9 @@
 - **✅ Validation Engine**: Comprehensive validation of migration success
 - **🖥️ Interactive Interface**: User-friendly prompts for easy configuration
 - **📊 Progress Tracking**: Real-time progress reporting with detailed logging
+- **📄 Template Integration**: Intelligent template integration with automated catalog configuration
+- **🔌 Plugin Support**: Infrastructure ready for FlowSource plugins (coming soon)
+- **🚀 Three-Phase Migration**: Complete migration from basic UI to full FlowSource platform
 
 ## 🛠️ Prerequisites
 
@@ -34,15 +37,20 @@ Flowsource_Package_1_0_0/
 │       ├── Readme.md               # Main setup guide
 │       ├── UI-Changes.md           # UI customization guide
 │       ├── Auth.md                 # Authentication setup guide
-│       └── GithubAuth.md           # GitHub OAuth provider guide
+│       ├── GithubAuth.md           # GitHub OAuth provider guide
+│       └── PDLC-template.md        # Template integration guide (Phase 3)
 ├── configuration/                  # Configuration files
 │   ├── app-config.yaml
 │   ├── package.json
 │   ├── Dockerfile
 │   └── ...
-└── packages-core/                  # Core application code
-    ├── app/                        # Frontend
-    └── backend/                    # Backend
+├── packages-core/                  # Core application code
+│   ├── app/                        # Frontend
+│   └── backend/                    # Backend
+└── Flowsource-templates/           # Templates for Phase 3 integration
+    ├── PDLC-Backend/               # Backend development template
+    ├── PDLC-Frontend/              # Frontend development template
+    └── ...                         # Additional templates
 ```
 
 ## 📋 Before You Start Migration
@@ -113,14 +121,15 @@ flowsource-migration-utility/
 ├── src/
 │   ├── index.js                    # Main entry point
 │   ├── core/
-│   │   ├── FlowSourceAgent.js      # Main migration logic
+│   │   ├── FlowSourceAgent.js      # Main migration logic with Phase 3 support
 │   │   ├── BackstageGenerator.js   # Backstage skeleton generation
 │   │   ├── FlowSourceTransformer.js # UI customization engine
 │   │   ├── AuthConfigure.js        # Authentication configuration
 │   │   ├── GitHubAuth.js           # GitHub OAuth provider setup
+│   │   ├── TemplateManager.js      # Template integration (Phase 3)
 │   │   └── ValidationEngine.js     # Migration validation
 │   ├── ui/
-│   │   └── InteractiveMode.js      # User interface
+│   │   └── InteractiveMode.js      # User interface with Phase 3 prompts
 │   ├── utils/
 │   │   ├── Logger.js               # Centralized logging
 │   │   ├── FileManager.js          # File operations
@@ -130,13 +139,15 @@ flowsource-migration-utility/
 │   │   ├── YamlConfigMerger.js     # YAML configuration merging
 │   │   └── CLIHelp.js              # Command line help
 │   └── tests/
-│       └── utility.test.js           # Test suite
+│       └── utility.test.js         # Test suite
 ├── DOCS/                           # Updated FlowSource documentation
 │   ├── Auth.md                     # Enhanced authentication setup guide
 │   ├── GithubAuth.md               # Enhanced GitHub OAuth provider guide
 │   ├── Readme.md                   # Enhanced main setup guide
+│   ├── UI-Changes.md               # Enhanced UI customization guide
 │   └── UI-Changes.md               # Enhanced UI customization guide
 ├── .github/                        # GitHub repository configuration
+│   ├── DEVELOPMENT_WORKFLOW.md     # Development workflow documentation
 │   └── pull_request_template.md    # PR template for contributors
 ├── logs/                           # Application logs
 ├── .env.example                    # Environment variables template
@@ -152,6 +163,7 @@ The utility includes an enhanced `DOCS/` folder containing updated FlowSource do
 - **Structured Parsing**: Formatted for automated parsing by `DocumentationParser.js`
 - **Enhanced Instructions**: More detailed setup steps and configuration examples
 - **Phase 2 Support**: Complete authentication and database setup guidance
+- **Phase 3 Support**: Template integration instructions for intelligent automation
 - **Validation Patterns**: Specific formats that enable automated configuration validation
 
 **DOCS Folder Contents:**
@@ -159,6 +171,9 @@ The utility includes an enhanced `DOCS/` folder containing updated FlowSource do
 - `DOCS/UI-Changes.md` - Enhanced UI customization patterns and validation logic
 - `DOCS/Auth.md` - Complete authentication configuration with parsing-friendly format
 - `DOCS/GithubAuth.md` - Detailed GitHub OAuth setup with automated configuration support
+
+**Phase 3 Requirements:**
+- `PDLC-template.md` - Template integration guide required for Phase 3 template processing
 
 ### Installation & Setup
 
@@ -257,21 +272,23 @@ npm run migrate -- \
 **Current CLI Mode Support:**
 - ✅ **Phase 1**: Full support - Basic FlowSource theme and UI migration
 - ❌ **Phase 2**: Not supported - Requires Interactive Mode for credentials collection
-- ❌ **Phase 3**: Not supported - Future enhancement
+- ❌ **Phase 3**: Not supported - Requires Interactive Mode for template/plugin selection
 
 **Why Phase 2+ Requires Interactive Mode:**
-Phase 2 requires collecting sensitive credentials that CLI mode cannot handle:
+Phase 2 requires collecting sensitive credentials and Phase 3 requires complex user selections that CLI mode cannot handle:
 - GitHub OAuth App credentials (Client ID, Client Secret)
 - Personal Access Tokens or GitHub App authentication
 - Database connection details (host, port, username, password)
 - Backend authentication secrets
 - Authentication provider selection
+- Template selection and configuration
+- Plugin selection and setup (when available)
 
-**For Phase 2 Migration:**
+**For Phase 2 & 3 Migration:**
 ```bash
-# Use Interactive Mode for Phase 2
+# Use Interactive Mode for Phase 2 & 3
 npm start
-# Select Phase 2 and follow the prompts for credential collection
+# Select Phase 2 or Phase 3 and follow the prompts for configuration
 ```
 
 ### Command Options
@@ -305,11 +322,49 @@ npm start
 - ✅ Cookie-based authentication
 - ⚠️ **Interactive Mode Only** (CLI mode coming soon)
 
-### Phase 3: Full FlowSource Platform (Coming Soon)
-- 🔌 50+ DevOps plugins
-- 🏗️ Infrastructure provisioning
+### Phase 3: Full FlowSource Platform ✅
+- ✅ Template integration (PDLC templates with intelligent parsing)
+- ✅ Automated catalog configuration for templates
+- ✅ Dynamic step calculation based on user selections
+- ✅ Template validation and verification
+- 🔌 Plugin integration (Infrastructure ready - Coming Soon)
+- 🏗️ Infrastructure provisioning templates
+- ⚠️ **Interactive Mode Only** (Templates fully available, Plugins coming soon)
 - 📊 Monitoring and observability
 - 🤖 AI-powered features
+
+## 🚀 Phase 3: Template Integration Details
+
+Phase 3 introduces intelligent template integration capabilities that transform your FlowSource application into a comprehensive development platform:
+
+### **📄 Template Integration Features:**
+- **🔍 Intelligent Discovery**: Automatically scans and detects available templates from FlowSource package
+- **📖 Documentation-Driven**: Parses PDLC-template.md for automated integration instructions
+- **🎯 User Selection**: Interactive prompts for template selection with descriptions
+- **📁 Smart Copying**: Intelligent file copying with path resolution and validation
+- **⚙️ Configuration Automation**: Automatic catalog entry creation in both app-config files
+- **🔄 Dual Config Support**: Maintains Phase 2 dual configuration patterns (template + local)
+- **✅ Validation Engine**: Comprehensive template structure and content validation
+
+### **📋 Available Templates:**
+- **PDLC-Backend**: Backend development template with best practices and scaffolding
+- **PDLC-Frontend**: Frontend development template with modern React patterns
+- **Additional Templates**: Expandable architecture for future template additions
+
+### **🔧 Integration Process:**
+1. **Prerequisites Check**: Validates Phase 2 completion and template availability
+2. **User Selection**: Interactive template selection with real-time discovery
+3. **Documentation Parsing**: Extracts integration instructions from PDLC-template.md
+4. **File Operations**: Copies template files with proper directory structure
+5. **Configuration Update**: Updates catalog locations in both config files
+6. **Validation**: Verifies template.yaml structure and accessibility
+7. **Completion**: Ready-to-use templates in Backstage catalog
+
+### **🎯 User Experience:**
+- **Dynamic Templates**: Templates discovered automatically from FlowSource package
+- **Smart Defaults**: Intelligent selection based on common use cases
+- **Progress Tracking**: Real-time feedback during template integration
+- **Error Handling**: Comprehensive error recovery and user guidance
 
 
 ## � Dependencies
@@ -391,6 +446,9 @@ The utility performs extensive validation:
 - ✅ Authentication setup
 - ✅ Database services integration
 - ✅ Permission policies configuration
+- ✅ Template integration validation
+- ✅ Template yaml structure verification
+- ✅ Catalog configuration accuracy
 
 ## 🐛 Troubleshooting
 
@@ -443,14 +501,41 @@ npm install -g yarn
 - Check path separators (use forward slashes or escape backslashes)
 - Ensure all required directories exist
 
-**CLI Mode Phase 2 Errors**
+**CLI Mode Phase 2/3 Errors**
 ```bash
 # Error: CLI mode GitHub authentication not yet implemented
 # Error: Phase 2 requires credential collection
+# Error: Phase 3 requires interactive mode for template selection
 ```
-- **Solution**: Use Interactive Mode for Phase 2 migrations
+- **Solution**: Use Interactive Mode for Phase 2 & 3 migrations
 - **CLI Mode**: Currently supports Phase 1 only
-- **Command**: `npm start` then select Phase 2
+- **Command**: `npm start` then select Phase 2 or Phase 3
+
+**Phase 3 Template Issues**
+```bash
+# Error: Template instructions not found
+# Error: PDLC-template.md not found
+```
+- **Solution**: Ensure PDLC-template.md exists in FlowSourceInstaller/FlowsourceSetupDoc/
+- **Verify**: Source package contains Flowsource-templates directory
+- **Check**: Template directories have template.yaml files
+
+**Template Integration Failures**
+```bash
+# Error: Template source not found
+# Error: Template.yaml structure validation failed
+```
+- **Solution**: Verify FlowSource package structure is complete
+- **Check**: Flowsource-templates/PDLC-Backend/ and PDLC-Frontend/ exist
+- **Validate**: Each template directory contains valid template.yaml
+
+**Phase 3 Prerequisites Not Met**
+```bash
+# Error: Phase 2 not completed
+# Error: app-config.yaml not found
+```
+- **Solution**: Complete Phase 2 migration first, or let Phase 3 auto-execute Phase 2
+- **Interactive Mode**: Will automatically handle Phase 2 prerequisites
 
 ### Debug Mode
 
@@ -463,6 +548,9 @@ node src/index.js --verbose
 
 # Check logs
 tail -f logs/combined.log
+
+# Test Phase 3 step calculation logic
+node test-step-calculation.js
 ```
 
 **Note**: The `--dry-run` feature is planned for a future release. Currently, all operations will execute normally even when this flag is used.
@@ -559,10 +647,23 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 After successful migration, you'll have:
 
+**Phase 1 Achievements:**
 - 🎨 **Professional FlowSource UI** with custom theming
 - 🏷️ **Branded Assets** including logos and favicons
 - 🧭 **Enhanced Navigation** with FlowSource-specific menu items
 - 📦 **Optimized Dependencies** with all required packages
-- ✅ **Validated Configuration** ensuring everything works correctly
+
+**Phase 2 Achievements:**
+- 🔐 **Secure Authentication** with GitHub OAuth or other providers
+- 🗄️ **Database Integration** with PostgreSQL or SQLite support
+- 👥 **User Management** with role-based access control
+- 🔑 **Dual Configuration** for template and local environments
+
+**Phase 3 Achievements:**
+- 📄 **Template Integration** with PDLC Backend and Frontend templates
+- 🎯 **Intelligent Catalog** with automatically configured template entries
+- 🚀 **Development Ready** scaffolding templates for rapid project creation
+- ✅ **Validated Setup** with comprehensive template structure verification
+- 🔄 **Seamless Experience** from basic UI to full development platform
 
 Start your FlowSource journey today! 🚀

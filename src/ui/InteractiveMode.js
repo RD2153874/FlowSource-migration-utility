@@ -42,6 +42,13 @@ export class InteractiveMode {
         // }
       }
 
+      // Collect configuration for Phase 3 (includes Phase 2 prerequisites)
+      if (config.phase === 3) {
+        // Phase 3 requires Phase 2 configuration, so collect both
+        await this.collectPhase2ConfigurationForPhase3(config);
+        await this.collectPhase3Options(config);
+      }
+
       // Confirm migration settings
       await this.confirmMigration(config);
 
@@ -153,24 +160,23 @@ export class InteractiveMode {
             value: 2,
           },
           {
-            name: "Phase 3: Full FlowSource with Plugins (Coming soon)",
+            name: "Phase 3: Full FlowSource with Templates & Plugins",
             value: 3,
-            disabled: "Available in future releases",
           },
         ],
-        default: 1,
+        default: 2,
       },
       {
         type: "confirm",
         name: "autoInstall",
         message: "📦 Automatically install dependencies after migration?",
-        default: true,
+        default: false,
       },
       {
         type: "confirm",
         name: "verboseLogging",
         message: "📊 Enable verbose logging?",
-        default: false,
+        default: true,
       },
     ];
 
@@ -231,6 +237,31 @@ export class InteractiveMode {
         console.log(`${chalk.gray("Client ID:")} ${config.githubAuth.clientId}`);
       } else {
         console.log(`${chalk.gray("GitHub App Auth:")} Disabled`);
+      }
+    }
+
+    // Show Phase 3 specific configuration
+    if (config.phase === 3) {
+      console.log("\n" + chalk.blue("🚀 Phase 3: Templates & Plugins Configuration:"));
+      
+      if (config.phase3Options) {
+        console.log(`${chalk.gray("Integration Type:")} ${config.phase3Options.integrationType}`);
+        
+        if (config.phase3Options.selectedTemplates && config.phase3Options.selectedTemplates.length > 0) {
+          console.log(`${chalk.gray("Selected Templates:")}`);
+          config.phase3Options.selectedTemplates.forEach(template => {
+            console.log(`${chalk.gray("  ✓")} ${template}`);
+          });
+        }
+        
+        if (config.phase3Options.selectedPlugins && config.phase3Options.selectedPlugins.length > 0) {
+          console.log(`${chalk.gray("Selected Plugins:")}`);
+          config.phase3Options.selectedPlugins.forEach(plugin => {
+            console.log(`${chalk.gray("  ✓")} ${plugin}`);
+          });
+        } else if (config.phase3Options.integrationType === 'plugins' || config.phase3Options.integrationType === 'both') {
+          console.log(`${chalk.gray("Plugins:")} Coming soon`);
+        }
       }
     }
 
@@ -480,7 +511,7 @@ export class InteractiveMode {
         type: "confirm",
         name: "hasOAuthApp",
         message: "Do you have a GitHub OAuth App created?",
-        default: false,
+        default: true,
       },
       {
         type: "input",
@@ -812,5 +843,173 @@ export class InteractiveMode {
     console.log(chalk.gray(`✓ Host: ${config.databaseConfig.host}:${config.databaseConfig.port}`));
     console.log(chalk.gray(`✓ User: ${config.databaseConfig.user}`));
     console.log(chalk.gray("✓ Password: [HIDDEN]"));
+  }
+
+  // ===== PHASE 3 COLLECTION METHODS =====
+
+  async collectPhase3Options(config) {
+    console.log("\n" + chalk.yellow("🚀 Phase 3: Templates & Plugins Configuration"));
+    console.log(chalk.gray("Configure what you want to integrate into your FlowSource application."));
+
+    // Main integration type selection
+    const integrationChoice = await Promise.race([
+      inquirer.prompt([{
+        type: "list",
+        name: "integrationType",
+        message: "🔧 What would you like to integrate?",
+        choices: [
+          { 
+            name: "📄 Templates only - Add FlowSource templates", 
+            value: "templates" 
+          },
+          { 
+            name: "🔌 Plugins only - Add FlowSource plugins (Coming Soon)", 
+            value: "plugins",
+            disabled: "Available in future releases"
+          },
+          { 
+            name: "🎯 Both Templates and Plugins", 
+            value: "both",
+            disabled: "Available when plugins are ready"
+          }
+        ],
+        default: "templates"
+      }]),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Phase 3 integration selection timeout")), 300000)
+      ),
+    ]);
+
+    config.phase3Options = {
+      integrationType: integrationChoice.integrationType
+    };
+
+    // Collect selections based on choice
+    if (integrationChoice.integrationType === "templates") {
+      await this.collectTemplateSelections(config);
+    } else if (integrationChoice.integrationType === "plugins") {
+      await this.collectPluginSelections(config);
+    } else if (integrationChoice.integrationType === "both") {
+      await this.collectBothSelections(config);
+    }
+
+    console.log("\n" + chalk.green("✅ Phase 3 configuration collected"));
+  }
+
+  async collectTemplateSelections(config) {
+    console.log("\n" + chalk.yellow("📄 Template Selection"));
+    console.log(chalk.gray("Select which templates you want to integrate into your FlowSource application."));
+
+    // Dynamically discover available templates
+    const { TemplateManager } = await import("../core/TemplateManager.js");
+    const templateManager = new TemplateManager(
+      config, 
+      this.agent.logger, 
+      this.agent.fileManager,
+      this.agent.sharedYamlMerger // Pass shared instance for consistency
+    );
+    
+    let availableTemplates;
+    try {
+      availableTemplates = await templateManager.getAvailableTemplates();
+    } catch (error) {
+      // Fallback to hardcoded templates if discovery fails
+      console.log(chalk.yellow("⚠️ Could not dynamically discover templates, using defaults"));
+      availableTemplates = [
+        { 
+          name: "PDLC-Backend", 
+          description: "Backend development template with best practices"
+        },
+        { 
+          name: "PDLC-Frontend", 
+          description: "Frontend development template with best practices"
+        }
+      ];
+    }
+
+    if (availableTemplates.length === 0) {
+      console.log(chalk.red("❌ No templates found in the FlowSource package"));
+      config.phase3Options.selectedTemplates = [];
+      return;
+    }
+
+    const templateSelection = await Promise.race([
+      inquirer.prompt([{
+        type: "checkbox",
+        name: "selectedTemplates",
+        message: "📄 Select templates to integrate:",
+        choices: availableTemplates.map(template => ({
+          name: `${template.name} - ${template.description}`,
+          value: template.name,
+          checked: false
+        })),
+        validate: (input) => {
+          if (input.length === 0) {
+            return "Please select at least one template";
+          }
+          return true;
+        }
+      }]),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Template selection timeout")), 300000)
+      ),
+    ]);
+
+    config.phase3Options.selectedTemplates = templateSelection.selectedTemplates;
+
+    console.log("\n" + chalk.green("✅ Template selection completed"));
+    templateSelection.selectedTemplates.forEach(template => {
+      console.log(chalk.gray(`   ✓ ${template}`));
+    });
+  }
+
+  async collectPluginSelections(config) {
+    console.log("\n" + chalk.yellow("🔌 Plugin Selection"));
+    console.log(chalk.gray("Plugin integration is coming soon! This will allow you to add FlowSource plugins."));
+
+    // For now, just inform user that plugins are coming soon
+    config.phase3Options.selectedPlugins = [];
+    
+    console.log("\n" + chalk.blue("ℹ️ Plugin integration will be available in a future release"));
+    console.log(chalk.gray("   🔌 50+ DevOps plugins available"));
+    console.log(chalk.gray("   🏗️ Infrastructure provisioning"));
+    console.log(chalk.gray("   📊 Monitoring and observability"));
+    console.log(chalk.gray("   🤖 AI-powered features"));
+  }
+
+  async collectBothSelections(config) {
+    console.log("\n" + chalk.yellow("🎯 Templates & Plugins Selection"));
+    console.log(chalk.gray("Since plugins are not yet available, only templates will be configured."));
+
+    // For now, just collect templates since plugins aren't ready
+    await this.collectTemplateSelections(config);
+    
+    config.phase3Options.selectedPlugins = [];
+    
+    console.log("\n" + chalk.blue("ℹ️ Plugin integration will be added when available"));
+  }
+
+  // collectPhase2ConfigurationForPhase3: Method to collect Phase 2 prerequisites for Phase 3
+  async collectPhase2ConfigurationForPhase3(config) {
+    console.log("\n" + chalk.cyan("🔐 Phase 3 Prerequisites: Phase 2 Configuration"));
+    console.log(chalk.gray("Phase 3 requires Phase 2 authentication setup. Let's configure this first."));
+
+    // Collect database configuration
+    await this.collectDatabaseConfig(config);
+
+    // Collect authentication configuration  
+    await this.collectAuthConfig(config);
+
+    // Select and configure authentication provider
+    const selectedProvider = await this.selectAuthProvider();
+    config.selectedAuthProvider = selectedProvider;
+
+    // Configure the selected provider
+    if (selectedProvider === 'github') {
+      await this.collectGitHubAuthConfig(config);
+    }
+    // Future providers can be added here
+
+    console.log("\n" + chalk.green("✅ Phase 2 configuration completed for Phase 3"));
   }
 }

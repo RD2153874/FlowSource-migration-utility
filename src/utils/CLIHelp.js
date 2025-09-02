@@ -230,11 +230,11 @@ ${chalk.yellow.bold("PHASE-SPECIFIC MIGRATION:")}
 ${chalk.cyan("# Phase 1: UI and Theme Only")}
 ${chalk.cyan("npm start -- --phase 1")}
 
-${chalk.cyan("# Phase 2: Add Authentication (Coming Soon)")}
-${chalk.gray("npm start -- --phase 2")}
+${chalk.cyan("# Phase 2: Add Authentication (Interactive Mode Only)")}
+${chalk.gray("npm start # Select Phase 2 in interactive mode")}
 
-${chalk.cyan("# Phase 3: Full Platform (Coming Soon)")}
-${chalk.gray("npm start -- --phase 3")}
+${chalk.cyan("# Phase 3: Templates & Plugins (Interactive Mode Only)")}
+${chalk.gray("npm start # Select Phase 3 in interactive mode")}
 
 ${chalk.yellow.bold("DEBUGGING:")}
 ${chalk.cyan("# Verbose logging")}

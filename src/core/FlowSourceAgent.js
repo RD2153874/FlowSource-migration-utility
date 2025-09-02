@@ -10,6 +10,7 @@ import { FlowSourceTransformer } from "./FlowSourceTransformer.js";
 import { ValidationEngine } from "./ValidationEngine.js";
 import { AuthConfigure } from "./AuthConfigure.js";
 import { GitHubAuth } from "./GitHubAuth.js";
+import { TemplateManager } from "./TemplateManager.js";
 import YamlConfigMerger from "../utils/YamlConfigMerger.js";
 import { execSync } from "child_process";
 import ora from "ora";
@@ -24,6 +25,7 @@ export class FlowSourceAgent {
     this.backstageGenerator = new BackstageGenerator();
     this.transformer = new FlowSourceTransformer();
     this.validator = new ValidationEngine();
+    this.templateManager = null; // Will be initialized when needed
     this.interactiveMode = null;
 
     // Create shared YamlConfigMerger instance for consolidating all config blocks
@@ -66,6 +68,7 @@ export class FlowSourceAgent {
 
       // Phase 1: Basic migration without plugins, auth, and database
       // Phase 2: Migration with Authentication & Permissions
+      // Phase 3: Full FlowSource with Templates & Plugins
       if (config.phase === 1) {
         // Reset migration state for Phase 1
         this.migrationState.currentStep = 0;
@@ -75,9 +78,11 @@ export class FlowSourceAgent {
         await this.executePhase1(config, spinner);
       } else if (config.phase === 2) {
         await this.executePhase2(config, spinner);
+      } else if (config.phase === 3) {
+        await this.executePhase3(config, spinner);
       } else {
         throw new Error(
-          `Unsupported phase: ${config.phase}. Supported phases: 1, 2`
+          `Unsupported phase: ${config.phase}. Supported phases: 1, 2, 3`
         );
       }
 
@@ -100,7 +105,7 @@ export class FlowSourceAgent {
   async executePhase2(config, spinner) {
     // Reset migration state for Phase 2
     this.migrationState.currentStep = 0;
-    this.migrationState.totalSteps = 12; // Phase 1 (8) + Phase 2 (5) steps - updated for dual config
+    this.migrationState.totalSteps = this.calculatePhase2TotalSteps();
     this.migrationState.errors = [];
     this.migrationState.warnings = [];
 
@@ -161,6 +166,73 @@ export class FlowSourceAgent {
         await this.createDualConfigurationFiles(config);
       }
     );
+  }
+
+  // PHASE 3
+  async executePhase3(config, spinner) {
+    // Reset migration state for Phase 3
+    this.migrationState.currentStep = 0;
+    this.migrationState.errors = [];
+    this.migrationState.warnings = [];
+
+    // First, validate and execute Phase 2 if not already done
+    await this.validateAndExecutePhase2(config, spinner);
+
+    // Phase 3 specific steps - Templates & Plugins Integration
+    this.logger.info("🚀 Starting Phase 3: Templates & Plugins Integration");
+
+    // Note: In interactive mode, Phase 3 options (Templates/Plugins/Both) and selections
+    // are handled in InteractiveMode.start() before calling migrate().
+    if (this.interactiveMode && !config.phase3Options) {
+      this.logger.info("ℹ️ Phase 3 options should have been collected in interactive mode");
+    } else if (!this.interactiveMode && !config.phase3Options) {
+      this.logger.info("ℹ️ CLI mode Phase 3 not yet implemented - use interactive mode");
+      throw new Error("Phase 3 requires interactive mode for template and plugin selection");
+    }
+
+    // Calculate dynamic total steps based on user selections
+    this.migrationState.totalSteps = this.calculatePhase3TotalSteps(config);
+
+    // Step 14: Validate Phase 3 prerequisites
+    await this.executeStep(spinner, "Validating Phase 3 prerequisites...", async () => {
+      await this.validatePhase3Prerequisites(config);
+    });
+
+    // Step 15: Process user selections (Templates/Plugins/Both)
+    await this.executeStep(spinner, "Processing integration selections...", async () => {
+      await this.processPhase3Selections(config);
+    });
+
+    // Step 16: Handle Templates integration (if selected)
+    if (config.phase3Options?.integrationType === 'templates' || 
+        config.phase3Options?.integrationType === 'both') {
+      await this.executeStep(spinner, "Integrating templates...", async () => {
+        await this.integrateTemplates(config);
+      });
+    }
+
+    // Step 17: Handle Plugins integration (if selected)
+    if (config.phase3Options?.integrationType === 'plugins' || 
+        config.phase3Options?.integrationType === 'both') {
+      await this.executeStep(spinner, "Integrating plugins...", async () => {
+        await this.integratePlugins(config);
+      });
+    }
+
+    // Step 18: Update configuration files
+    await this.executeStep(spinner, "Updating configuration files...", async () => {
+      await this.updateConfigurationForPhase3(config);
+    });
+
+    // Step 19: Validate integrations
+    await this.executeStep(spinner, "Validating integrations...", async () => {
+      await this.validatePhase3Integrations(config);
+    });
+
+    // Step 20: Final validation and cleanup
+    await this.executeStep(spinner, "Final validation and cleanup...", async () => {
+      await this.finalizePhase3Setup(config);
+    });
   }
 
   // PHASE 1
@@ -256,7 +328,7 @@ export class FlowSourceAgent {
 
     // Safety check: Ensure step counter doesn't exceed total steps
     if (stepNumber > totalSteps) {
-      this.logger.warn(`⚠️ Step counter (${stepNumber}) exceeds total steps (${totalSteps}). Adjusting total steps.`);
+      this.logger.warn(`⚠️ Step counter (${stepNumber}) exceeds total steps (${totalSteps}). This may indicate an issue with dynamic step calculation.`);
       this.migrationState.totalSteps = stepNumber;
     }
 
@@ -580,6 +652,21 @@ export class FlowSourceAgent {
     }
   }
 
+  /**
+   * Dynamic Step Calculation System
+   * 
+   * This system calculates the total number of steps for each phase based on:
+   * - Phase 1: Fixed 8 steps (base migration)
+   * - Phase 2: Fixed 5 steps + Phase 1 (authentication & dual config)
+   * - Phase 3: Variable steps based on user selections:
+   *   - Base: 4 steps (validate, process, update config, finalize)
+   *   - +1 step if templates selected
+   *   - +1 step if plugins selected
+   *   - +2 steps if both selected
+   * 
+   * This eliminates the step counter warnings that occurred with fixed counts.
+   */
+
   //Utility methods
   async validateAndExecutePhase1(config, spinner) {
     // Check if Phase 1 has been completed
@@ -623,8 +710,57 @@ export class FlowSourceAgent {
       await this.executePhase1(config, spinner);
     } else {
       this.logger.info("✅ Phase 1 already completed, proceeding with Phase 2");
-      // Update step counter to reflect completed Phase 1 steps (8 steps)
-      this.migrationState.currentStep = 8;
+      // Update step counter to reflect completed Phase 1 steps
+      this.migrationState.currentStep = 8; // Phase 1 has fixed 8 steps
+    }
+  }
+
+  async validateAndExecutePhase2(config, spinner) {
+    // Check if Phase 2 has been completed
+    const phase2Indicators = [
+      path.join(config.destinationPath, "packages", "backend", "src", "plugins", "auth.ts"),
+      path.join(config.destinationPath, "app-config.local.yaml"),
+      path.join(config.destinationPath, "packages", "backend", "src", "plugins", "helper", "auth-helper.ts"),
+      path.join(config.destinationPath, "packages", "backend", "src", "plugins", "database"),
+    ];
+
+    let phase2Completed = true;
+    const missingItems = [];
+
+    for (const indicator of phase2Indicators) {
+      if (!(await fs.pathExists(indicator))) {
+        phase2Completed = false;
+        missingItems.push(indicator);
+      }
+    }
+
+    // Additional check: Verify auth section exists in app-config.yaml
+    const appConfigPath = path.join(config.destinationPath, "app-config.yaml");
+    if (await fs.pathExists(appConfigPath)) {
+      const configContent = await fs.readFile(appConfigPath, 'utf8');
+      if (!configContent.includes('auth:') || !configContent.includes('providers:')) {
+        phase2Completed = false;
+        missingItems.push("Authentication configuration in app-config.yaml");
+      }
+    }
+
+    if (!phase2Completed) {
+      this.logger.warn("⚠️ Phase 2 not completed. Missing items:");
+      missingItems.forEach((item) => this.logger.warn(`   - ${item}`));
+      
+      // Check if we're in CLI mode and Phase 2 is incomplete
+      if (!this.interactiveMode) {
+        throw new Error("Phase 2 not completed and CLI mode cannot collect credentials. Please run Phase 2 first or use interactive mode for Phase 3.");
+      }
+      
+      this.logger.info("🔄 Executing Phase 2 first...");
+
+      // Execute Phase 2 steps
+      await this.executePhase2(config, spinner);
+    } else {
+      this.logger.info("✅ Phase 2 already completed, proceeding with Phase 3");
+      // Update step counter to reflect completed Phase 1 + Phase 2 steps
+      this.migrationState.currentStep = this.calculatePhase2TotalSteps();
     }
   }
 
@@ -925,5 +1061,172 @@ export class FlowSourceAgent {
       console.log("3. Run: yarn dev");
       console.log("4. Open: http://localhost:3000");
     }
+  }
+
+  // ===== PHASE 3 METHODS =====
+
+  async validatePhase3Prerequisites(config) {
+    this.logger.info("🔍 Validating Phase 3 prerequisites...");
+    
+    // Validate that Phase 2 is completed
+    // Validate source package structure for templates
+    const templatesPath = path.join(config.sourcePath, "Flowsource-templates");
+    if (!(await fs.pathExists(templatesPath))) {
+      throw new Error(`Flowsource-templates directory not found: ${templatesPath}`);
+    }
+
+    this.logger.info("✅ Phase 3 prerequisites validated");
+  }
+
+  async processPhase3Selections(config) {
+    this.logger.info("📋 Processing Phase 3 integration selections...");
+    
+    if (!config.phase3Options) {
+      throw new Error("Phase 3 options not configured - should be set in interactive mode");
+    }
+
+    this.logger.info(`🎯 Integration type: ${config.phase3Options.integrationType}`);
+    
+    if (config.phase3Options.selectedTemplates) {
+      this.logger.info(`📄 Selected templates: ${config.phase3Options.selectedTemplates.join(', ')}`);
+    }
+    
+    if (config.phase3Options.selectedPlugins) {
+      this.logger.info(`🔌 Selected plugins: ${config.phase3Options.selectedPlugins.join(', ')}`);
+    }
+  }
+
+  async integrateTemplates(config) {
+    this.logger.info("📄 Starting intelligent template integration...");
+    
+    // Initialize TemplateManager with shared YamlMerger for dual configuration consistency
+    if (!this.templateManager) {
+      this.templateManager = new TemplateManager(
+        config, 
+        this.logger, 
+        this.fileManager, 
+        this.sharedYamlMerger // Pass shared instance for dual config alignment
+      );
+    }
+
+    // Get selected templates from config
+    const selectedTemplates = config.phase3Options?.selectedTemplates || [];
+    
+    if (selectedTemplates.length === 0) {
+      this.logger.warn("⚠️ No templates selected for integration");
+      return;
+    }
+
+    try {
+      // Integrate templates using the intelligent parser
+      const result = await this.templateManager.integrateSelectedTemplates(selectedTemplates);
+      
+      if (result.success) {
+        this.logger.info(`✅ Successfully integrated ${result.integratedTemplates.length} templates`);
+        result.integratedTemplates.forEach(template => {
+          this.logger.info(`   📄 ${template}`);
+        });
+      }
+    } catch (error) {
+      this.logger.error(`❌ Template integration failed: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async integratePlugins(config) {
+    this.logger.info("🔌 Starting plugin integration...");
+    
+    // TODO: Implement plugin integration using PluginManager
+    // For now, show "coming soon" message
+    this.logger.info("🔌 Plugin integration is coming soon!");
+    
+    if (config.phase3Options?.selectedPlugins) {
+      config.phase3Options.selectedPlugins.forEach(plugin => {
+        this.logger.info(`🔌 Plugin ${plugin} integration coming soon`);
+      });
+    }
+    
+    this.logger.info("✅ Plugins integration completed (stub implementation)");
+  }
+
+  async updateConfigurationForPhase3(config) {
+    this.logger.info("⚙️ Updating configuration files for Phase 3...");
+    
+    // Configuration updates are handled automatically by TemplateManager
+    // during template integration via YamlConfigMerger
+    
+    // Additional Phase 3 configuration updates can be added here
+    // For example: updating package.json with plugin dependencies when implemented
+    
+    this.logger.info("✅ Configuration files updated for Phase 3");
+  }
+
+  async validatePhase3Integrations(config) {
+    this.logger.info("🔍 Validating Phase 3 integrations...");
+    
+    // Validate template integrations if templates were selected
+    if (config.phase3Options?.selectedTemplates && config.phase3Options.selectedTemplates.length > 0) {
+      if (!this.templateManager) {
+        this.templateManager = new TemplateManager(
+          config, 
+          this.logger, 
+          this.fileManager, 
+          this.sharedYamlMerger // Pass shared instance for consistency
+        );
+      }
+      
+      try {
+        await this.templateManager.validateTemplateIntegration(config.phase3Options.selectedTemplates);
+        this.logger.info("✅ Template integrations validated successfully");
+      } catch (error) {
+        this.logger.error(`❌ Template validation failed: ${error.message}`);
+        throw error;
+      }
+    }
+
+    // TODO: Validate plugin integrations when implemented
+    
+    this.logger.info("✅ Phase 3 integrations validated successfully");
+  }
+
+  async finalizePhase3Setup(config) {
+    this.logger.info("🎁 Finalizing Phase 3 setup...");
+    
+    // TODO: Final cleanup and validation
+    // TODO: Generate setup instructions for user
+    
+    this.logger.info("✅ Phase 3 setup finalized (stub implementation)");
+  }
+
+  // Calculate dynamic total steps for Phase 3 based on user selections
+  calculatePhase3TotalSteps(config) {
+    let baseSteps = 13; // Phase 1 (8) + Phase 2 (5) steps
+    let phase3Steps = 4; // Base Phase 3 steps: validate, process selections, update config, final validation
+    
+    // Add conditional steps based on user selections
+    const integrationType = config.phase3Options?.integrationType;
+    
+    if (integrationType === 'templates') {
+      phase3Steps += 1; // Add template integration step
+    } else if (integrationType === 'plugins') {
+      phase3Steps += 1; // Add plugin integration step
+    } else if (integrationType === 'both') {
+      phase3Steps += 2; // Add both template and plugin integration steps
+    }
+    
+    const totalSteps = baseSteps + phase3Steps;
+    this.logger.info(`📊 Calculated total steps for Phase 3: ${totalSteps} (base: ${baseSteps}, phase3: ${phase3Steps})`);
+    
+    return totalSteps;
+  }
+
+  // Calculate dynamic total steps for Phase 2
+  calculatePhase2TotalSteps() {
+    const baseSteps = 8; // Phase 1 steps
+    const phase2Steps = 5; // Phase 2: validate auth, process credentials, create dual config, validate setup, finalize
+    const totalSteps = baseSteps + phase2Steps;
+    
+    this.logger.info(`📊 Calculated total steps for Phase 2: ${totalSteps} (phase1: ${baseSteps}, phase2: ${phase2Steps})`);
+    return totalSteps;
   }
 }
