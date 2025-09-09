@@ -5,6 +5,7 @@ import fs from "fs-extra";
 import chalk from "chalk";
 import crypto from "crypto";
 import { Logger } from "../utils/Logger.js";
+import { Phase3Orchestrator } from "../core/Phase3Orchestrator.js";
 
 export class InteractiveMode {
   constructor(agent) {
@@ -47,6 +48,9 @@ export class InteractiveMode {
         // Phase 3 requires Phase 2 configuration, so collect both
         await this.collectPhase2ConfigurationForPhase3(config);
         await this.collectPhase3Options(config);
+        
+        // Create and configure Phase3Orchestrator
+        config.phase3Orchestrator = await this.createPhase3Orchestrator(config);
       }
 
       // Confirm migration settings
@@ -863,14 +867,12 @@ export class InteractiveMode {
             value: "templates" 
           },
           { 
-            name: "🔌 Plugins only - Add FlowSource plugins (Coming Soon)", 
-            value: "plugins",
-            disabled: "Available in future releases"
+            name: "🔌 Plugins only - Add FlowSource plugins (Stub implementation)", 
+            value: "plugins"
           },
           { 
-            name: "🎯 Both Templates and Plugins", 
-            value: "both",
-            disabled: "Available when plugins are ready"
+            name: "🎯 Both Templates and Plugins (Templates + Plugin stubs)", 
+            value: "both"
           }
         ],
         default: "templates"
@@ -881,7 +883,8 @@ export class InteractiveMode {
     ]);
 
     config.phase3Options = {
-      integrationType: integrationChoice.integrationType
+      integrationType: integrationChoice.integrationType,
+      discoveredPlugins: null // Initialize plugin cache
     };
 
     // Collect selections based on choice
@@ -900,21 +903,20 @@ export class InteractiveMode {
     console.log("\n" + chalk.yellow("📄 Template Selection"));
     console.log(chalk.gray("Select which templates you want to integrate into your FlowSource application."));
 
-    // Dynamically discover available templates
-    const { TemplateManager } = await import("../core/TemplateManager.js");
-    const templateManager = new TemplateManager(
-      config, 
-      this.agent.logger, 
+    // Create temporary orchestrator for template discovery
+    const tempOrchestrator = new Phase3Orchestrator(
+      config,
+      this.agent.logger,
       this.agent.fileManager,
-      this.agent.sharedYamlMerger // Pass shared instance for consistency
+      this.agent.sharedYamlMerger
     );
     
     let availableTemplates;
     try {
-      availableTemplates = await templateManager.getAvailableTemplates();
+      availableTemplates = await tempOrchestrator.discoverAvailableTemplates();
     } catch (error) {
       // Fallback to hardcoded templates if discovery fails
-      console.log(chalk.yellow("⚠️ Could not dynamically discover templates, using defaults"));
+      console.log(chalk.yellow("⚠️ Could not discover templates via orchestrator, using defaults"));
       availableTemplates = [
         { 
           name: "PDLC-Backend", 
@@ -965,28 +967,291 @@ export class InteractiveMode {
 
   async collectPluginSelections(config) {
     console.log("\n" + chalk.yellow("🔌 Plugin Selection"));
-    console.log(chalk.gray("Plugin integration is coming soon! This will allow you to add FlowSource plugins."));
+    console.log(chalk.gray("Configure FlowSource plugins for your application."));
 
-    // For now, just inform user that plugins are coming soon
-    config.phase3Options.selectedPlugins = [];
+    // First, collect catalog onboarding choice (prerequisite for plugins)
+    await this.collectCatalogOnboardingChoice(config);
+
+    // Parse Plugin-Integration.md and get available plugins (cache the result)
+    let availablePlugins = config.phase3Options.discoveredPlugins;
     
-    console.log("\n" + chalk.blue("ℹ️ Plugin integration will be available in a future release"));
-    console.log(chalk.gray("   🔌 50+ DevOps plugins available"));
-    console.log(chalk.gray("   🏗️ Infrastructure provisioning"));
-    console.log(chalk.gray("   📊 Monitoring and observability"));
-    console.log(chalk.gray("   🤖 AI-powered features"));
+    if (!availablePlugins || availablePlugins.length === 0) {
+      availablePlugins = await this.getAvailablePlugins(config);
+      // Cache the discovered plugins to avoid duplicate discovery during migration
+      config.phase3Options.discoveredPlugins = availablePlugins;
+    } else {
+      this.logger.info("♻️  Using cached plugin discovery results");
+    }
+    
+    if (availablePlugins.length === 0) {
+      console.log(chalk.red("❌ No plugins found in Plugin-Integration.md"));
+      config.phase3Options.selectedPlugins = [];
+      return;
+    }
+
+    // Sort plugins alphabetically by display name for better UX
+    const sortedPlugins = [...availablePlugins].sort((a, b) => {
+      const nameA = (a.displayName || a.name).toLowerCase();
+      const nameB = (b.displayName || b.name).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
+    // Present plugin selection to user with improved formatting and pageSize
+    const pluginSelection = await inquirer.prompt([
+      {
+        type: 'checkbox',
+        name: 'selectedPlugins',
+        message: '🔌 Select the plugins you want to integrate:',
+        choices: sortedPlugins.map(plugin => ({
+          name: `${plugin.displayName || plugin.name} - ${plugin.displayName || plugin.name} plugin`,
+          value: plugin.name,
+          short: plugin.displayName || plugin.name
+        })),
+        pageSize: 10, // Fixed pageSize to prevent circular scroll
+        loop: false, // Disable circular navigation
+        validate: (choices) => {
+          if (choices.length === 0) {
+            return 'Please select at least one plugin to continue.';
+          }
+          return true;
+        }
+      }
+    ]);
+
+    config.phase3Options.selectedPlugins = pluginSelection.selectedPlugins;
+
+    console.log("\n" + chalk.green("✅ Plugin selection completed"));
+    pluginSelection.selectedPlugins.forEach(plugin => {
+      const pluginMetadata = availablePlugins.find(p => p.name === plugin);
+      const displayName = pluginMetadata ? (pluginMetadata.displayName || pluginMetadata.name) : plugin;
+      console.log(chalk.gray(`   ✓ ${displayName}`));
+    });
+  }
+
+  async collectCatalogOnboardingChoice(config) {
+    console.log("\n" + chalk.cyan("📋 Catalog Onboarding"));
+    console.log(chalk.gray("Choose how you want to onboard catalogs for plugin integration:"));
+
+    const catalogOptions = [
+      {
+        name: '📱 Manual Registration via FlowSource UI (Post-migration task)',
+        value: 'manual',
+        short: 'Manual UI Registration'
+      },
+      {
+        name: '🌐 Remote Location Configuration (GitHub URLs)',
+        value: 'remote',
+        short: 'Remote URLs'
+      },
+      {
+        name: '📁 Local Catalog Registration (catalog-info.yaml)',
+        value: 'local',
+        short: 'Local Files'
+      }
+    ];
+
+    const catalogChoice = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'choice',
+        message: '🎯 Select catalog onboarding method:',
+        choices: catalogOptions,
+        default: 'local'
+      }
+    ]);
+
+    // Store catalog onboarding choice
+    config.phase3Options.catalogOnboarding = {
+      choice: catalogChoice.choice,
+      config: {}
+    };
+
+    // Collect additional configuration based on choice
+    if (catalogChoice.choice === 'remote') {
+      await this.collectRemoteCatalogConfig(config);
+    } else if (catalogChoice.choice === 'local') {
+      await this.collectLocalCatalogConfig(config);
+    }
+
+    console.log(chalk.green(`✅ Catalog onboarding method selected: ${catalogOptions.find(opt => opt.value === catalogChoice.choice)?.short}`));
+  }
+
+  async collectRemoteCatalogConfig(config) {
+    console.log(chalk.gray("\n🌐 Configure remote catalog locations:"));
+    
+    // First ask how many repositories they want to configure
+    const repoCountChoice = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'count',
+        message: '📊 How many remote repositories do you want to configure?',
+        choices: [
+          { name: '1 repository', value: 1 },
+          { name: '2 repositories', value: 2 },
+          { name: '3 repositories', value: 3 },
+          { name: '4 repositories', value: 4 },
+          { name: '5 repositories', value: 5 }
+        ],
+        default: 1
+      }
+    ]);
+    
+    const repositories = [];
+    const availableRules = ['Component', 'System', 'API', 'Resource', 'Location', 'User', 'Group'];
+    
+    for (let i = 0; i < repoCountChoice.count; i++) {
+      console.log(chalk.cyan(`\n📎 Repository ${i + 1}:`));
+      
+      const repoConfig = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'url',
+          message: `🔗 Enter GitHub URL for repository ${i + 1}:`,
+          default: i === 0 ? 
+            'https://github.com/CognizantCodeHub/plugin-test-impl-team/blob/rishu-test/catalog-info.yaml' : 
+            undefined,
+          validate: (input) => {
+            if (!input.trim()) {
+              return 'URL cannot be empty';
+            }
+            if (!input.includes('github.com')) {
+              return 'Please enter a valid GitHub URL';
+            }
+            return true;
+          }
+        },
+        {
+          type: 'checkbox',
+          name: 'rules',
+          message: `🛡️ What entity types should be allowed for repository ${i + 1}?`,
+          choices: availableRules,
+          default: ['Component'],
+          validate: (choices) => {
+            if (choices.length === 0) {
+              return 'Please select at least one entity type';
+            }
+            return true;
+          }
+        }
+      ]);
+      
+      repositories.push(repoConfig);
+    }
+
+    config.phase3Options.catalogOnboarding.config = {
+      repositories: repositories
+    };
+    
+    console.log(chalk.green(`✅ Configured ${repositories.length} remote catalog location(s)`));
+  }
+
+  async collectLocalCatalogConfig(config) {
+    console.log(chalk.gray("\n📁 Local catalog configuration will use the standard catalog-info.yaml file."));
+    console.log(chalk.gray("No additional configuration required - using: ../../catalog-info.yaml"));
+    
+    // No prompts needed - use fixed configuration as per requirements
+    config.phase3Options.catalogOnboarding.config = {
+      target: '../../catalog-info.yaml'
+    };
+    
+    console.log(chalk.green("✅ Local catalog configuration set"));
+  }
+
+  async getAvailablePlugins(config) {
+    this.logger.info("🔍 Discovering available plugins from Plugin-Integration.md...");
+    
+    try {
+      // Create temporary orchestrator for plugin discovery
+      const tempOrchestrator = new Phase3Orchestrator(
+        config,
+        this.agent.logger,
+        this.agent.fileManager,
+        this.agent.sharedYamlMerger
+      );
+
+      const availablePlugins = await tempOrchestrator.discoverAvailablePlugins();
+      
+      if (availablePlugins.length > 0) {
+        // Plugin count already logged in Phase3Orchestrator, don't duplicate
+        return availablePlugins;
+      } else {
+        this.logger.warn("⚠️ No plugins found in documentation");
+        return [];
+      }
+    } catch (error) {
+      this.logger.error(`❌ Failed to discover plugins: ${error.message}`);
+      
+      // Fallback to hardcoded list for development with proper structure
+      return [
+        { 
+          name: 'github-plugin', 
+          displayName: 'GitHub Plugin', 
+          description: 'GitHub integration plugin',
+          frontendPath: 'plugins/github/README.md', 
+          backendPath: 'plugins/github-backend/README.md' 
+        },
+        { 
+          name: 'jira-plugin', 
+          displayName: 'Jira Plugin', 
+          description: 'Jira integration plugin',
+          frontendPath: 'plugins/jira/README.md', 
+          backendPath: 'plugins/jira-backend/README.md' 
+        },
+        { 
+          name: 'datadog-plugin', 
+          displayName: 'Datadog Plugin', 
+          description: 'Datadog integration plugin',
+          frontendPath: 'plugins/datadog/README.md', 
+          backendPath: 'plugins/datadog-backend/README.md' 
+        }
+      ];
+    }
   }
 
   async collectBothSelections(config) {
     console.log("\n" + chalk.yellow("🎯 Templates & Plugins Selection"));
-    console.log(chalk.gray("Since plugins are not yet available, only templates will be configured."));
+    console.log(chalk.gray("Configure both templates and plugins for your application."));
 
-    // For now, just collect templates since plugins aren't ready
+    // Ask user for execution order preference
+    const orderChoice = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'executionOrder',
+        message: '📋 Which integration would you like to execute first?',
+        choices: [
+          {
+            name: '📄 Templates first, then Plugins',
+            value: ['templates', 'plugins'],
+            short: 'Templates → Plugins'
+          },
+          {
+            name: '🔌 Plugins first, then Templates',
+            value: ['plugins', 'templates'],
+            short: 'Plugins → Templates'
+          }
+        ],
+        default: ['templates', 'plugins']
+      }
+    ]);
+
+    config.phase3Options.executionOrder = orderChoice.executionOrder;
+
+    // Collect both template and plugin selections
     await this.collectTemplateSelections(config);
+    await this.collectPluginSelections(config);
     
-    config.phase3Options.selectedPlugins = [];
+    console.log("\n" + chalk.green("✅ Both templates and plugins configured"));
+    console.log(chalk.gray(`   📋 Execution order: ${orderChoice.executionOrder.map(type => 
+      type.charAt(0).toUpperCase() + type.slice(1)
+    ).join(' → ')}`));
     
-    console.log("\n" + chalk.blue("ℹ️ Plugin integration will be added when available"));
+    if (config.phase3Options.selectedTemplates?.length > 0) {
+      console.log(chalk.gray(`   📄 Templates: ${config.phase3Options.selectedTemplates.join(', ')}`));
+    }
+    
+    if (config.phase3Options.selectedPlugins?.length > 0) {
+      console.log(chalk.gray(`   � Plugins: ${config.phase3Options.selectedPlugins.join(', ')}`));
+    }
   }
 
   // collectPhase2ConfigurationForPhase3: Method to collect Phase 2 prerequisites for Phase 3
@@ -1011,5 +1276,59 @@ export class InteractiveMode {
     // Future providers can be added here
 
     console.log("\n" + chalk.green("✅ Phase 2 configuration completed for Phase 3"));
+  }
+
+  // createPhase3Orchestrator: Method to initialize Phase3Orchestrator with execution context
+  async createPhase3Orchestrator(config) {
+    console.log("\n" + chalk.cyan("🎯 Initializing Phase 3 Orchestrator"));
+    console.log(chalk.gray("Setting up orchestration for templates and plugins integration..."));
+
+    try {
+      // Create orchestrator instance
+      const orchestrator = new Phase3Orchestrator(
+        config,
+        this.agent.logger,
+        this.agent.fileManager,
+        this.agent.sharedYamlMerger
+      );
+
+      // Create execution context with all collected information
+      const executionContext = {
+        phase3Options: config.phase3Options,
+        sourcePath: config.sourcePath,
+        destinationPath: config.destinationPath,
+        applicationName: config.applicationName,
+        // Phase 2 context (if needed for Phase 3)
+        authConfig: config.authConfig,
+        githubAuth: config.githubAuth,
+        selectedAuthProvider: config.selectedAuthProvider,
+        databaseConfig: config.databaseConfig,
+        // Migration settings
+        nonInteractive: config.nonInteractive,
+        autoInstall: config.autoInstall,
+        dryRun: config.dryRun
+      };
+
+      // Store execution context in config for FlowSourceAgent to use
+      config.phase3ExecutionContext = executionContext;
+
+      console.log(chalk.green("✅ Phase 3 Orchestrator initialized successfully"));
+      console.log(chalk.gray(`   🎯 Integration Type: ${config.phase3Options.integrationType}`));
+      
+      if (config.phase3Options.selectedTemplates?.length > 0) {
+        console.log(chalk.gray(`   📄 Templates: ${config.phase3Options.selectedTemplates.join(', ')}`));
+      }
+      
+      if (config.phase3Options.selectedPlugins?.length > 0) {
+        console.log(chalk.gray(`   🔌 Plugins: ${config.phase3Options.selectedPlugins.join(', ')}`));
+      }
+
+      return orchestrator;
+
+    } catch (error) {
+      console.log(chalk.red(`❌ Failed to initialize Phase 3 Orchestrator: ${error.message}`));
+      this.logger.error(`Phase3Orchestrator initialization failed: ${error.message}`);
+      throw error;
+    }
   }
 }

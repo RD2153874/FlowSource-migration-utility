@@ -139,6 +139,16 @@ export default class YamlConfigMerger {
   }
 
   /**
+   * Convenient alias for mergeIntoYamlFile
+   * @param {string} filePath - Path to the target YAML file
+   * @param {object} newConfig - New configuration to merge
+   * @param {string} comment - Optional comment to add before the merged section
+   */
+  async mergeConfig(filePath, newConfig, comment = null) {
+    return await this.mergeIntoYamlFile(filePath, newConfig, comment);
+  }
+
+  /**
    * Extract YAML configuration from markdown code blocks
    * @param {string} markdownContent - Markdown content containing YAML blocks
    * @returns {object} Parsed YAML configuration
@@ -498,7 +508,7 @@ export default class YamlConfigMerger {
             rules: [{ allow: ['User', 'Group'] }]
           }
         ],
-        useUrlReadersSearch: true
+        useUrlReadersSearch: false
       },
       kubernetes: null,
       permission: {

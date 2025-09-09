@@ -158,7 +158,7 @@ export class FlowSourceAgent {
       }
     );
 
-    // Step 13: Create dual configuration files (template and local versions)
+    // Step 13: Create dual configuration files
     await this.executeStep(
       spinner,
       "Creating dual configuration files...",
@@ -178,16 +178,12 @@ export class FlowSourceAgent {
     // First, validate and execute Phase 2 if not already done
     await this.validateAndExecutePhase2(config, spinner);
 
-    // Phase 3 specific steps - Templates & Plugins Integration
-    this.logger.info("🚀 Starting Phase 3: Templates & Plugins Integration");
+    // Phase 3 specific steps - Templates & Plugins Integration via Orchestrator
+    this.logger.info("🚀 Starting Phase 3: Templates & Plugins Integration via Orchestrator");
 
-    // Note: In interactive mode, Phase 3 options (Templates/Plugins/Both) and selections
-    // are handled in InteractiveMode.start() before calling migrate().
-    if (this.interactiveMode && !config.phase3Options) {
-      this.logger.info("ℹ️ Phase 3 options should have been collected in interactive mode");
-    } else if (!this.interactiveMode && !config.phase3Options) {
-      this.logger.info("ℹ️ CLI mode Phase 3 not yet implemented - use interactive mode");
-      throw new Error("Phase 3 requires interactive mode for template and plugin selection");
+    // Validate that Phase 3 orchestrator and execution context are available
+    if (!config.phase3Orchestrator || !config.phase3ExecutionContext) {
+      throw new Error("Phase 3 orchestrator not initialized. Please use interactive mode or ensure proper configuration.");
     }
 
     // Calculate dynamic total steps based on user selections
@@ -195,42 +191,41 @@ export class FlowSourceAgent {
 
     // Step 14: Validate Phase 3 prerequisites
     await this.executeStep(spinner, "Validating Phase 3 prerequisites...", async () => {
-      await this.validatePhase3Prerequisites(config);
+      await config.phase3Orchestrator.validatePrerequisites();
     });
 
-    // Step 15: Process user selections (Templates/Plugins/Both)
-    await this.executeStep(spinner, "Processing integration selections...", async () => {
-      await this.processPhase3Selections(config);
+    // Step 15: Execute Phase 3 integration via orchestrator
+    await this.executeStep(spinner, "Executing Phase 3 integrations...", async () => {
+      const results = await config.phase3Orchestrator.execute(config.phase3ExecutionContext);
+      
+      // Store results for summary display
+      this.migrationState.phase3Results = results;
+      
+      if (!results.success) {
+        // Build comprehensive error message
+        let errorMessage = 'Phase 3 integration failed';
+        
+        if (results.summary?.errors && results.summary.errors.length > 0) {
+          errorMessage = `Phase 3 integration failed: ${results.summary.errors.join(', ')}`;
+        } else {
+          // Provide additional debugging information
+          errorMessage += ` - Check details: Templates(${results.templates?.success ? 'OK' : 'FAILED'}), Plugins(${results.plugins?.success ? 'OK' : 'FAILED'})`;
+        }
+        
+        // Log the full results for debugging
+        this.logger.error('📋 Full Phase 3 results for debugging:', JSON.stringify(results, null, 2));
+        
+        throw new Error(errorMessage);
+      }
+      
+      this.logger.info(`✅ Phase 3 integration completed successfully`);
+      this.logger.info(`   📊 Total integrations: ${results.totalIntegrations}`);
+      this.logger.info(`   ✅ Successful: ${results.successfulIntegrations}`);
+      this.logger.info(`   ❌ Failed: ${results.failedIntegrations}`);
     });
 
-    // Step 16: Handle Templates integration (if selected)
-    if (config.phase3Options?.integrationType === 'templates' || 
-        config.phase3Options?.integrationType === 'both') {
-      await this.executeStep(spinner, "Integrating templates...", async () => {
-        await this.integrateTemplates(config);
-      });
-    }
-
-    // Step 17: Handle Plugins integration (if selected)
-    if (config.phase3Options?.integrationType === 'plugins' || 
-        config.phase3Options?.integrationType === 'both') {
-      await this.executeStep(spinner, "Integrating plugins...", async () => {
-        await this.integratePlugins(config);
-      });
-    }
-
-    // Step 18: Update configuration files
-    await this.executeStep(spinner, "Updating configuration files...", async () => {
-      await this.updateConfigurationForPhase3(config);
-    });
-
-    // Step 19: Validate integrations
-    await this.executeStep(spinner, "Validating integrations...", async () => {
-      await this.validatePhase3Integrations(config);
-    });
-
-    // Step 20: Final validation and cleanup
-    await this.executeStep(spinner, "Final validation and cleanup...", async () => {
+    // Step 16: Final validation and cleanup
+    await this.executeStep(spinner, "Final Phase 3 validation...", async () => {
       await this.finalizePhase3Setup(config);
     });
   }
@@ -1057,6 +1052,42 @@ export class FlowSourceAgent {
         console.log("5. Open: http://localhost:3000");
       }
       
+      // Display Phase 3 specific results if available
+      if (this.options.phase >= 3 && this.migrationState.phase3Results) {
+        console.log("\n" + chalk.magenta("🚀 Phase 3: Integration Results:"));
+        const results = this.migrationState.phase3Results;
+        
+        console.log(`   📊 Total integrations: ${results.totalIntegrations}`);
+        console.log(`   ✅ Successful: ${results.successfulIntegrations}`);
+        console.log(`   ❌ Failed: ${results.failedIntegrations}`);
+        
+        if (results.summary?.integratedTemplates?.length > 0) {
+          console.log("\n" + chalk.blue("📄 Integrated Templates:"));
+          results.summary.integratedTemplates.forEach(template => {
+            console.log(`   ✓ ${template}`);
+          });
+        }
+        
+        if (results.summary?.integratedPlugins?.length > 0) {
+          console.log("\n" + chalk.blue("🔌 Integrated Plugins:"));
+          results.summary.integratedPlugins.forEach(plugin => {
+            console.log(`   ✓ ${plugin}`);
+          });
+        }
+        
+        if (results.summary?.errors?.length > 0) {
+          console.log("\n" + chalk.red("❌ Integration Errors:"));
+          results.summary.errors.forEach(error => {
+            console.log(`   • ${error}`);
+          });
+        }
+        
+        console.log("\n" + chalk.blue("🎯 Phase 3 Next Steps:"));
+        console.log("   1. Review integrated templates and plugins");
+        console.log("   2. Test new functionality in your application");
+        console.log("   3. Customize templates as needed for your use case");
+      }
+      
     } else {
       console.log("3. Run: yarn dev");
       console.log("4. Open: http://localhost:3000");
@@ -1192,30 +1223,23 @@ export class FlowSourceAgent {
   async finalizePhase3Setup(config) {
     this.logger.info("🎁 Finalizing Phase 3 setup...");
     
-    // TODO: Final cleanup and validation
-    // TODO: Generate setup instructions for user
+    // Validate the final integrations without rebuilding dual config files
+    // Dual config files were already built at the end of Phase 2
+    await this.validateDualConfigStructure(config.destinationPath);
     
-    this.logger.info("✅ Phase 3 setup finalized (stub implementation)");
+    this.logger.info("✅ Phase 3 setup finalized");
   }
 
   // Calculate dynamic total steps for Phase 3 based on user selections
   calculatePhase3TotalSteps(config) {
-    let baseSteps = 13; // Phase 1 (8) + Phase 2 (5) steps
-    let phase3Steps = 4; // Base Phase 3 steps: validate, process selections, update config, final validation
+    let baseSteps = 14; // Phase 1 (8) + Phase 2 (6) steps
+    let phase3Steps = 3; // Simplified Phase 3 steps via orchestrator: validate, execute integrations, finalize
     
-    // Add conditional steps based on user selections
-    const integrationType = config.phase3Options?.integrationType;
-    
-    if (integrationType === 'templates') {
-      phase3Steps += 1; // Add template integration step
-    } else if (integrationType === 'plugins') {
-      phase3Steps += 1; // Add plugin integration step
-    } else if (integrationType === 'both') {
-      phase3Steps += 2; // Add both template and plugin integration steps
-    }
-    
+    // Note: The orchestrator handles the complexity internally, but FlowSourceAgent 
+    // only needs to track the high-level steps
     const totalSteps = baseSteps + phase3Steps;
     this.logger.info(`📊 Calculated total steps for Phase 3: ${totalSteps} (base: ${baseSteps}, phase3: ${phase3Steps})`);
+    this.logger.info(`📋 Phase 3 integration type: ${config.phase3Options?.integrationType || 'unknown'}`);
     
     return totalSteps;
   }
@@ -1223,7 +1247,7 @@ export class FlowSourceAgent {
   // Calculate dynamic total steps for Phase 2
   calculatePhase2TotalSteps() {
     const baseSteps = 8; // Phase 1 steps
-    const phase2Steps = 5; // Phase 2: validate auth, process credentials, create dual config, validate setup, finalize
+    const phase2Steps = 6; // Phase 2: validate auth, process credentials, create dual config, validate setup, finalize
     const totalSteps = baseSteps + phase2Steps;
     
     this.logger.info(`📊 Calculated total steps for Phase 2: ${totalSteps} (phase1: ${baseSteps}, phase2: ${phase2Steps})`);

@@ -21,21 +21,48 @@ export class TemplateManager {
       // Parse the PDLC template documentation
       const templateInstructions = await this.parseTemplateInstructions();
       
+      const integratedTemplates = [];
+      const failedTemplates = [];
+      
       // Execute template integration based on user selections
       for (const template of selectedTemplates) {
         this.logger.info(`📄 Integrating template: ${template}`);
-        await this.integrateTemplate(template, templateInstructions);
+        try {
+          await this.integrateTemplate(template, templateInstructions);
+          integratedTemplates.push(template);
+        } catch (templateError) {
+          this.logger.error(`❌ Failed to integrate template ${template}: ${templateError.message}`);
+          failedTemplates.push({ name: template, error: templateError.message });
+        }
       }
 
-      // Update app configuration with template catalog entries
-      await this.updateAppConfigForTemplates(selectedTemplates);
+      // Update app configuration with template catalog entries for successful integrations
+      if (integratedTemplates.length > 0) {
+        await this.updateAppConfigForTemplates(integratedTemplates);
+      }
 
-      this.logger.info("✅ Template integration completed successfully");
-      return { success: true, integratedTemplates: selectedTemplates };
+      const success = failedTemplates.length === 0;
+      this.logger.info(`✅ Template integration completed: ${integratedTemplates.length} successful, ${failedTemplates.length} failed`);
+      
+      return { 
+        success: success, 
+        integratedTemplates: integratedTemplates,
+        failedTemplates: failedTemplates,
+        message: success ? "All templates integrated successfully" : `${failedTemplates.length} templates failed to integrate`
+      };
 
     } catch (error) {
-      this.logger.error(`❌ Template integration failed: ${error.message}`);
-      throw error;
+      this.logger.error(`❌ Template integration failed at framework level: ${error.message}`);
+      this.logger.error(`❌ Template integration error details:`, error);
+      
+      const errorDetails = `Framework error during template integration: ${error.message}`;
+      return {
+        success: false,
+        integratedTemplates: [],
+        failedTemplates: selectedTemplates.map(t => ({ name: t, error: `Framework error: ${error.message}` })),
+        error: errorDetails,
+        message: `Template integration failed at framework level: ${error.message}`
+      };
     }
   }
 
