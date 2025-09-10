@@ -88,7 +88,10 @@ export class Phase3Orchestrator {
         // Pass complete phase3Options context including cached plugins
         phase3Options: this.config.phase3Options,
         // Pass catalog onboarding configuration
-        catalogOnboarding: this.config.phase3Options?.catalogOnboarding || null
+        catalogOnboarding: this.config.phase3Options?.catalogOnboarding || null,
+        // Pass GitHub repository configuration for plugins that need it
+        githubRepoOwner: this.config.githubRepoOwner || null,
+        githubRepoName: this.config.githubRepoName || null
       });
       this.logger.info("✅ PluginManager initialized");
     }

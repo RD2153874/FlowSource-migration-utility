@@ -1026,6 +1026,9 @@ export class InteractiveMode {
       const displayName = pluginMetadata ? (pluginMetadata.displayName || pluginMetadata.name) : plugin;
       console.log(chalk.gray(`   ✓ ${displayName}`));
     });
+
+    // After plugin selection, collect GitHub repository configuration if needed
+    await this.collectGitHubPluginConfiguration(config);
   }
 
   async collectCatalogOnboardingChoice(config) {
@@ -1329,6 +1332,56 @@ export class InteractiveMode {
       console.log(chalk.red(`❌ Failed to initialize Phase 3 Orchestrator: ${error.message}`));
       this.logger.error(`Phase3Orchestrator initialization failed: ${error.message}`);
       throw error;
+    }
+  }
+
+  async collectGitHubPluginConfiguration(config) {
+    // Check if any selected plugins require GitHub repository configuration
+    const selectedPlugins = config.phase3Options?.selectedPlugins || [];
+    const needsGithubConfig = selectedPlugins.some(plugin => 
+      plugin.toLowerCase().includes('github')
+    );
+    
+    if (needsGithubConfig) {
+      console.log(chalk.cyan("\n🔧 GitHub Plugin Configuration"));
+      console.log(chalk.gray("GitHub plugins require repository owner and name for catalog annotations."));
+      
+      const githubConfig = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'githubRepoOwner',
+          message: '👤 Enter GitHub repository owner (organization or username):',
+          validate: (input) => {
+            if (!input || input.trim().length === 0) {
+              return 'GitHub repository owner is required for GitHub plugins';
+            }
+            if (!/^[a-zA-Z0-9\-._]+$/.test(input.trim())) {
+              return 'GitHub owner should only contain alphanumeric characters, hyphens, dots, and underscores';
+            }
+            return true;
+          }
+        },
+        {
+          type: 'input',
+          name: 'githubRepoName', 
+          message: '📁 Enter GitHub repository name:',
+          validate: (input) => {
+            if (!input || input.trim().length === 0) {
+              return 'GitHub repository name is required for GitHub plugins';
+            }
+            if (!/^[a-zA-Z0-9\-._]+$/.test(input.trim())) {
+              return 'GitHub repository name should only contain alphanumeric characters, hyphens, dots, and underscores';
+            }
+            return true;
+          }
+        }
+      ]);
+      
+      // Store GitHub configuration in config for plugin handlers to access
+      config.githubRepoOwner = githubConfig.githubRepoOwner.trim();
+      config.githubRepoName = githubConfig.githubRepoName.trim();
+      
+      console.log(chalk.green(`✅ GitHub repository configured: ${config.githubRepoOwner}/${config.githubRepoName}`));
     }
   }
 }

@@ -40,6 +40,13 @@ export class PluginManager {
             this.context.catalogOnboarding = context.catalogOnboarding;
         }
         
+        // Store GitHub repository configuration for plugin handlers that need it
+        if (context.githubRepoOwner && context.githubRepoName) {
+            this.context.githubRepoOwner = context.githubRepoOwner;
+            this.context.githubRepoName = context.githubRepoName;
+            this.logger.debug(`PluginManager: GitHub repository configuration available: ${context.githubRepoOwner}/${context.githubRepoName}`);
+        }
+        
         // Log the paths for debugging
         if (context.workspacePath) {
             this.logger.debug(`PluginManager: Using source package path: ${context.workspacePath}`);
@@ -669,20 +676,8 @@ export class PluginManager {
                 this.logger.info(`  - Backend path: ${pluginMetadata.backendPath}`);
                 this.logger.info(`  - Context workspace: ${this.context.workspacePath}`);
 
-                console.log(`🔧 TEST MODE: GithubPluginHandler would be created here for ${pluginMetadata.displayName} Plugin`);
-                
-                // Temporary mock handler for testing - comment out the real handler
-                // return new GithubPluginHandler(pluginMetadata, this.context);
-                return {
-                    integrate: async (context) => {
-                        console.log(`🔧 TEST MODE: GithubPluginHandler.integrate() called for ${pluginMetadata.displayName}`);
-                        return {
-                            message: `TEST MODE: ${pluginMetadata.displayName} plugin integration simulated`,
-                            status: 'test_mode',
-                            metadata: pluginMetadata
-                        };
-                    }
-                };
+                // Create and return the actual GithubPluginHandler with full context
+                return new GithubPluginHandler(pluginMetadata, this.context);
             default:
                 // Enhanced generic handler with README parsing and sophisticated integration
                 this.logger.warn(`No specific handler found for ${pluginMetadata.name}, using enhanced generic integration`);
