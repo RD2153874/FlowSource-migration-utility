@@ -320,9 +320,12 @@ export class GithubPluginHandler {
         }
 
         // Extract PR Cycle Time config (Step 2)
-        const prCycleTimeMatch = content.match(/```yaml\s*\n(githubPRCycleTime:[\s\S]*?PRMergeCycleTimeMax:\s*\d+[\s\S]*?)\n```/);
+        const prCycleTimeMatch = content.match(/```yaml\s*\n\s*(githubPRCycleTime:[\s\S]*?PRMergeCycleTimeMax:\s*\d+[^\n]*)\s*\n```/);
         if (prCycleTimeMatch) {
-            metadata.config.prCycleTime = prCycleTimeMatch[1];
+            metadata.config.prCycleTime = prCycleTimeMatch[1].trim();
+            this.logger.debug('🔍 Extracted PR Cycle Time config:', prCycleTimeMatch[1].trim());
+        } else {
+            this.logger.warn('❌ PR Cycle Time config not found in backend README');
         }
 
         // Extract backend imports (Step 3)
@@ -365,20 +368,26 @@ export class GithubPluginHandler {
                     if (!hasExistingConfig) {
                         // Merge GitHub integration config
                         if (backendConfig.githubIntegration) {
+                            this.logger.debug(`📝 Adding GitHub integration to ${configFile}`);
                             const integrationConfig = this.parseYamlBlock(backendConfig.githubIntegration);
                             await this.yamlConfigMerger.mergeIntoYamlFile(configPath, integrationConfig);
                         }
                         
-                        // Merge PR Cycle Time config
-                        if (backendConfig.prCycleTime) {
-                            const cycleTimeConfig = this.parseYamlBlock(backendConfig.prCycleTime);
-                            await this.yamlConfigMerger.mergeIntoYamlFile(configPath, cycleTimeConfig);
-                        }
-                        
-                        this.logger.info(`Successfully updated ${configFile}`);
+                        this.logger.info(`Successfully updated ${configFile} with GitHub integration`);
                     } else {
-                        this.logger.info(`GitHub configuration already exists in ${configFile}, skipping...`);
+                        this.logger.info(`GitHub integration already exists in ${configFile}, skipping...`);
                     }
+                    
+                    // Always try to merge PR Cycle Time config (it's plugin-specific and should be added)
+                    if (backendConfig.prCycleTime) {
+                        this.logger.debug(`📝 Adding PR Cycle Time configuration to ${configFile}`);
+                        const cycleTimeConfig = this.parseYamlBlock(backendConfig.prCycleTime);
+                        await this.yamlConfigMerger.mergeIntoYamlFile(configPath, cycleTimeConfig);
+                        this.logger.info(`Successfully added PR Cycle Time configuration to ${configFile}`);
+                    } else {
+                        this.logger.warn(`❌ No PR Cycle Time configuration found to add to ${configFile}`);
+                    }
+                    
                 } else {
                     this.logger.warn(`Configuration file not found: ${configFile}`);
                 }
@@ -402,6 +411,8 @@ export class GithubPluginHandler {
 
     parseYamlBlock(yamlString) {
         // Convert YAML string to object structure
+        this.logger.debug('🔍 Parsing YAML block:', yamlString);
+        
         const lines = yamlString.split('\n');
         const result = {};
         
@@ -416,7 +427,16 @@ export class GithubPluginHandler {
             const trimmedLine = line.trim();
             
             if (trimmedLine.includes(':')) {
-                const [key, value] = trimmedLine.split(':').map(s => s.trim());
+                // Split on first colon to handle values with colons
+                const colonIndex = trimmedLine.indexOf(':');
+                const key = trimmedLine.substring(0, colonIndex).trim();
+                let value = trimmedLine.substring(colonIndex + 1).trim();
+                
+                // Remove inline comments for value parsing (but preserve the original structure)
+                const commentIndex = value.indexOf('#');
+                if (commentIndex > -1) {
+                    value = value.substring(0, commentIndex).trim();
+                }
                 
                 // Handle indentation changes
                 while (indent < lastIndent && stack.length > 1) {
@@ -432,12 +452,20 @@ export class GithubPluginHandler {
                     stack.push(currentObj[key]);
                     lastIndent = indent;
                 } else {
-                    // This is a key-value pair
-                    currentObj[key] = value.startsWith('${') ? value : value;
+                    // This is a key-value pair - convert numeric strings to numbers
+                    if (/^\d+$/.test(value)) {
+                        currentObj[key] = parseInt(value, 10);
+                    } else if (value.startsWith('${') && value.endsWith('}')) {
+                        // Keep environment variables as strings
+                        currentObj[key] = value;
+                    } else {
+                        currentObj[key] = value;
+                    }
                 }
             }
         }
         
+        this.logger.debug('🔍 Parsed YAML result:', JSON.stringify(result, null, 2));
         return result;
     }
 

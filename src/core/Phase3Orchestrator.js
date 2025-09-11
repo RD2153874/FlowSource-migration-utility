@@ -198,10 +198,10 @@ export class Phase3Orchestrator {
     }
 
     try {
-      // Get catalog onboarding choice from context
-      const catalogChoice = context.phase3Options.catalogOnboarding?.choice || null;
+      // Get catalog onboarding choices from context (now supports multiple methods)
+      const catalogChoices = context.phase3Options.catalogOnboarding?.choices || [];
       
-      const result = await this.pluginManager.integratePlugins(selectedPlugins, catalogChoice);
+      const result = await this.pluginManager.integratePlugins(selectedPlugins, catalogChoices);
       this.logger.info(`✅ Plugin integration completed: ${result.results?.length || 0} plugins processed`);
       
       return {

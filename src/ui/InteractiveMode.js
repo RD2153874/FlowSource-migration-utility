@@ -266,6 +266,21 @@ export class InteractiveMode {
         } else if (config.phase3Options.integrationType === 'plugins' || config.phase3Options.integrationType === 'both') {
           console.log(`${chalk.gray("Plugins:")} Coming soon`);
         }
+        
+        // Show catalog onboarding configuration
+        if (config.phase3Options.catalogOnboarding && config.phase3Options.catalogOnboarding.choices) {
+          const catalogOptions = [
+            { value: 'manual', short: 'Manual UI Registration' },
+            { value: 'remote', short: 'Remote URLs' },
+            { value: 'local', short: 'Local Files' }
+          ];
+          
+          const selectedMethods = config.phase3Options.catalogOnboarding.choices.map(choice => 
+            catalogOptions.find(opt => opt.value === choice)?.short || choice
+          ).join(', ');
+          
+          console.log(`${chalk.gray("Catalog Onboarding:")} ${selectedMethods}`);
+        }
       }
     }
 
@@ -1033,7 +1048,7 @@ export class InteractiveMode {
 
   async collectCatalogOnboardingChoice(config) {
     console.log("\n" + chalk.cyan("📋 Catalog Onboarding"));
-    console.log(chalk.gray("Choose how you want to onboard catalogs for plugin integration:"));
+    console.log(chalk.gray("Choose how you want to onboard catalogs for plugin integration (you can select multiple methods):"));
 
     const catalogOptions = [
       {
@@ -1055,28 +1070,41 @@ export class InteractiveMode {
 
     const catalogChoice = await inquirer.prompt([
       {
-        type: 'list',
-        name: 'choice',
-        message: '🎯 Select catalog onboarding method:',
+        type: 'checkbox',
+        name: 'choices',
+        message: '🎯 Select catalog onboarding method(s):',
         choices: catalogOptions,
-        default: 'local'
+        default: ['local'],
+        validate: (choices) => {
+          if (choices.length === 0) {
+            return 'Please select at least one catalog onboarding method';
+          }
+          return true;
+        }
       }
     ]);
 
-    // Store catalog onboarding choice
+    // Store catalog onboarding choices with new structure
     config.phase3Options.catalogOnboarding = {
-      choice: catalogChoice.choice,
-      config: {}
+      choices: catalogChoice.choices,
+      configs: {}
     };
 
-    // Collect additional configuration based on choice
-    if (catalogChoice.choice === 'remote') {
-      await this.collectRemoteCatalogConfig(config);
-    } else if (catalogChoice.choice === 'local') {
-      await this.collectLocalCatalogConfig(config);
+    // Collect configuration for each selected method
+    for (const choice of catalogChoice.choices) {
+      if (choice === 'remote') {
+        await this.collectRemoteCatalogConfig(config);
+      } else if (choice === 'local') {
+        await this.collectLocalCatalogConfig(config);
+      }
+      // Manual doesn't require additional configuration
     }
 
-    console.log(chalk.green(`✅ Catalog onboarding method selected: ${catalogOptions.find(opt => opt.value === catalogChoice.choice)?.short}`));
+    const selectedMethods = catalogChoice.choices.map(choice => 
+      catalogOptions.find(opt => opt.value === choice)?.short
+    ).join(', ');
+    
+    console.log(chalk.green(`✅ Catalog onboarding method(s) selected: ${selectedMethods}`));
   }
 
   async collectRemoteCatalogConfig(config) {
@@ -1141,7 +1169,7 @@ export class InteractiveMode {
       repositories.push(repoConfig);
     }
 
-    config.phase3Options.catalogOnboarding.config = {
+    config.phase3Options.catalogOnboarding.configs.remote = {
       repositories: repositories
     };
     
@@ -1153,7 +1181,7 @@ export class InteractiveMode {
     console.log(chalk.gray("No additional configuration required - using: ../../catalog-info.yaml"));
     
     // No prompts needed - use fixed configuration as per requirements
-    config.phase3Options.catalogOnboarding.config = {
+    config.phase3Options.catalogOnboarding.configs.local = {
       target: '../../catalog-info.yaml'
     };
     
@@ -1239,9 +1267,18 @@ export class InteractiveMode {
 
     config.phase3Options.executionOrder = orderChoice.executionOrder;
 
-    // Collect both template and plugin selections
-    await this.collectTemplateSelections(config);
-    await this.collectPluginSelections(config);
+    // Collect selections in the order specified by user
+    console.log(chalk.gray(`📋 Collecting selections in order: ${orderChoice.executionOrder.map(type => 
+      type.charAt(0).toUpperCase() + type.slice(1)
+    ).join(' → ')}`));
+    
+    for (const integrationType of orderChoice.executionOrder) {
+      if (integrationType === 'templates') {
+        await this.collectTemplateSelections(config);
+      } else if (integrationType === 'plugins') {
+        await this.collectPluginSelections(config);
+      }
+    }
     
     console.log("\n" + chalk.green("✅ Both templates and plugins configured"));
     console.log(chalk.gray(`   📋 Execution order: ${orderChoice.executionOrder.map(type => 

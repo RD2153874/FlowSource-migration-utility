@@ -64,7 +64,11 @@ export class PluginManager {
         }
         
         if (context.catalogOnboarding) {
-            this.logger.debug(`PluginManager: Catalog onboarding configuration loaded: ${context.catalogOnboarding.choice}`);
+            // Handle both old and new structures for backward compatibility
+            const catalogInfo = context.catalogOnboarding.choices ? 
+                context.catalogOnboarding.choices.join(', ') : 
+                context.catalogOnboarding.choice || 'unknown';
+            this.logger.debug(`PluginManager: Catalog onboarding configuration loaded: ${catalogInfo}`);
         }
         
         // Log cached plugin metadata if available
@@ -73,13 +77,13 @@ export class PluginManager {
         }
     }
 
-    async integratePlugins(selectedPlugins = [], catalogChoice = null) {
+    async integratePlugins(selectedPlugins = [], catalogChoices = []) {
         try {
             this.logger.info('Starting plugin integration...');
 
             // Configure catalog onboarding first (only once per session)
-            if (!this.catalogOnboarded && catalogChoice) {
-                await this.configureCatalogOnboarding(catalogChoice);
+            if (!this.catalogOnboarded && catalogChoices.length > 0) {
+                await this.configureCatalogOnboarding(catalogChoices);
                 this.catalogOnboarded = true;
             }
 
@@ -135,17 +139,19 @@ export class PluginManager {
         }
     }
 
-    async configureCatalogOnboarding(choice) {
-        this.logger.info(`Configuring catalog onboarding: ${choice}`);
+    async configureCatalogOnboarding(choices) {
+        this.logger.info(`Configuring catalog onboarding for: ${choices.join(', ')}`);
         
         try {
-            // Apply catalog configuration based on choice
-            await this.applyCatalogConfig(choice);
+            // Apply catalog configuration for each selected method
+            for (const choice of choices) {
+                await this.applyCatalogConfig(choice);
+            }
             
             // Store reference for context
-            this.context.catalogOnboarding = { type: choice };
+            this.context.catalogOnboarding = { types: choices };
             
-            this.logger.info(`Catalog onboarding configuration completed for: ${choice}`);
+            this.logger.info(`Catalog onboarding configuration completed for: ${choices.join(', ')}`);
         } catch (error) {
             this.logger.error(`Failed to configure catalog onboarding: ${error.message}`);
             throw error;
@@ -277,11 +283,11 @@ export class PluginManager {
 
     async collectRemoteCatalogInput() {
         // Get remote catalog configuration from interactive mode context
-        if (!this.context.catalogOnboarding || !this.context.catalogOnboarding.config) {
+        if (!this.context.catalogOnboarding || !this.context.catalogOnboarding.configs || !this.context.catalogOnboarding.configs.remote) {
             throw new Error('Remote catalog configuration not found in context');
         }
         
-        const config = this.context.catalogOnboarding.config;
+        const config = this.context.catalogOnboarding.configs.remote;
         
         if (!config.repositories || !Array.isArray(config.repositories)) {
             throw new Error('Invalid remote catalog configuration: repositories array not found');
